@@ -1,0 +1,35 @@
+(defpackage :osm-reader
+  (:use :cl))
+
+(in-package :osm-reader)
+
+(defun read-osm-file (&optional (file-name #p"/home/yuri/work/globus/osm/UA.osm.pbf"))
+  (with-open-file (fs file-name :direction :input :element-type 'unsigned-byte)
+    (let ((blob-header-len-buf (make-array 4 :element-type '(unsigned-byte 8))))
+      (read-sequence blob-header-len-buf fs)
+      (format t "blob-header-len-buf ~A~%" blob-header-len-buf)
+      (let ((blob-header-len 0))
+        (loop for d across blob-header-len-buf
+             do (setf blob-header-len (logior (ash blob-header-len 8) d)))
+        (format t "blob-header-len ~A~%" blob-header-len)
+        (let ((blob-header-buf (make-array blob-header-len :element-type '(unsigned-byte 8))))
+          (read-sequence blob-header-buf fs)
+          (let ((blob-header (make-instance 'osmpbf:blob-header)))
+            (pb:merge-from-array blob-header blob-header-buf 0 blob-header-len)
+            (format t "blob-header ~A~%" blob-header)
+            (let ((blob-buf (make-array (osmpbf:datasize blob-header) :element-type '(unsigned-byte 8))))
+              (read-sequence blob-buf fs)
+              (let ((blob (make-instance 'osmpbf:blob)))
+                (pb:merge-from-array blob blob-buf 0 (length blob-buf))
+                (format t "blob ~A~%" blob)
+                (let ((data (if (osmpbf:has-raw blob)
+                                (osmpbf:raw blob)
+                                (coerce (zlib:uncompress (osmpbf:zlib-data blob)) '(simple-array (unsigned-byte 8) (*))))))
+                  (cond
+                    ((string= (pb:string-value (osmpbf:type blob-header)) "OSMHeader")
+                     (read-osm-header data))))))))))))
+
+(defun read-osm-header (data)
+  (let ((header (make-instance 'osmpbf:header-block)))
+    (pb:merge-from-array header data 0 (length data))
+    header))

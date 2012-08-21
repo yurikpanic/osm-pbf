@@ -44,10 +44,15 @@
                            (read-osm-header data))
                           ((string= (pb:string-value (osmpbf:type blob-header)) "OSMData")
                            (setf nodes (read-osm-data data i nodes))
-                           (when (>= i 0)
+                           (when (>= i 10)
                              (return-from read-osm-file (values nodes)))
                            )))
                     (condition (c) (format t "!!! data decode error ~A~%" c))))))))))))
+
+;; (defparameter *nodes* (read-osm-file))
+;; (dolist (nn *nodes*)
+;;   (loop for node across nn
+;;      do (print-node node)))
 
 (defun read-osm-header (data)
   (let ((header (make-instance 'osmpbf:header-block)))

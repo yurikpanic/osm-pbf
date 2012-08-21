@@ -15,8 +15,9 @@
   (with-open-file (fs file-name :direction :input :element-type 'unsigned-byte)
     (do ((i 0 (1+ i))
          (file-size (file-length fs))
-         (file-pos 0 (file-position fs)))
-        ((>= file-pos file-size) nil)
+         (file-pos 0 (file-position fs))
+         (nodes nil))
+        ((>= file-pos file-size) (values nodes))
       (let ((blob-header-len-buf (make-array 4 :element-type '(unsigned-byte 8))))
         (read-sequence blob-header-len-buf fs)
         (format t "================================= :~A [~,1F %]~%blob-header-len-buf ~A~%" file-pos (* (/ file-pos file-size) 100.0) blob-header-len-buf)
@@ -42,15 +43,16 @@
                           ((string= (pb:string-value (osmpbf:type blob-header)) "OSMHeader")
                            (read-osm-header data))
                           ((string= (pb:string-value (osmpbf:type blob-header)) "OSMData")
-                           (read-osm-data data i)
-                           (return-from read-osm-file))))
+                           (setf nodes (read-osm-data data i nodes))
+                           (when (>= i 0)
+                             (return-from read-osm-file (values nodes)))
+                           )))
                     (condition (c) (format t "!!! data decode error ~A~%" c))))))))))))
 
 (defun read-osm-header (data)
   (let ((header (make-instance 'osmpbf:header-block)))
     (pb:merge-from-array header data 0 (length data))
     (format t "header ======~%~A~%" header)))
-
 
 (defun read-string-table (st)
   (let ((st-converted (make-array (length st))))
@@ -62,11 +64,59 @@
                            '(simple-array (unsigned-byte 8) (*))))))
     st-converted))
 
-(defun print-string-table (st &optional (stream t))
-  (loop for st-entry across st
-       do (format stream "~A~%" st-entry)))
+(defstruct node
+  (id 0 :type (unsigned-byte 64))
+  (lon 0 :type (unsigned-byte 64))
+  (lat 0 :type (unsigned-byte 64))
+  (st-ref #() :type array)
+  (tags nil :type list))
 
-(defun read-osm-data (data idx)
+(defun print-node (node &optional (stream t))
+  (format stream ":id ~A :lon ~A :lat ~A" (node-id node) (node-lon node) (node-lat node))
+  (dolist (tag (node-tags node))
+    (format stream "~%    ~A . ~A"
+            (aref (node-st-ref node) (car tag))
+            (aref (node-st-ref node) (cdr tag))))
+  (format stream "~%"))
+
+(defun read-keys-values-arr (kv-arr st-arr nodes)
+  "read key-value array and populate unpacked nodes with their attributes"
+  (do ((node-idx 0)
+       (kv-idx 0)
+       (kv-size (length kv-arr)))
+      ((>= kv-idx kv-size))
+    (let ((key (aref kv-arr kv-idx)))
+      (incf kv-idx)
+      (if (zerop key)
+          (incf node-idx)
+          (let ((value (aref kv-arr kv-idx)))
+            (incf kv-idx)
+            (let ((node (aref nodes node-idx)))
+              (setf (node-st-ref node) st-arr
+                    (node-tags node) (cons (cons key value) (node-tags node)))))))))
+
+(defun unpack-dense (dn st-arr)
+  (let ((prev-node nil)
+        (nodes (make-array (length (osmpbf:id dn)) :element-type 'node :initial-element (make-node))))
+    (loop for id across (osmpbf:id dn)
+         for lon across (osmpbf:lon dn)
+         for lat across (osmpbf:lat dn)
+         for i from 0
+         do (let ((node (make-node)))
+              (if prev-node
+                  (progn
+                    (setf (node-id node) (+ id (node-id prev-node))
+                          (node-lat node) (+ lat (node-lat prev-node))
+                          (node-lon node) (+ lon (node-lon prev-node))))
+                  (setf (node-id node) id
+                        (node-lat node) lat
+                        (node-lon node) lon))
+              (setf (aref nodes i) node
+                    prev-node node)))
+    (read-keys-values-arr (osmpbf:keys-vals dn) st-arr nodes)
+    nodes))
+
+(defun read-osm-data (data idx &optional nodes)
   (let ((pblock (make-instance 'osmpbf:primitive-block)))
     (pb:merge-from-array pblock data 0 (length data))
     (format t "pblock ~A ======~%" idx)
@@ -75,7 +125,6 @@
     (format t "lon-offset ~A~%" (osmpbf:lon-offset pblock))
     (let ((string-table (read-string-table (osmpbf:s (osmpbf:stringtable pblock)))))
       (format t "string-table with ~A entries~%" (length string-table))
-      ;; (print-string-table string-table)
       (let ((pgroup-arr (osmpbf:primitivegroup pblock)))
         (loop for pgroup across pgroup-arr
            for pgidx from 0
@@ -84,8 +133,14 @@
                      pgidx
                      (length (osmpbf:nodes pgroup))
                      (if (osmpbf:has-dense pgroup)
-                         (length (osmpbf:id (osmpbf:dense pgroup)))
+                         (progn
+                           (setf nodes
+                                 (cons
+                                  (unpack-dense (osmpbf:dense pgroup) string-table)
+                                  nodes))
+                           (length (osmpbf:id (osmpbf:dense pgroup))))
                          0)
                      (length (osmpbf:ways pgroup))
                      (length (osmpbf:relations pgroup))
-                     (length (osmpbf:changesets pgroup))))))))
+                     (length (osmpbf:changesets pgroup))))
+        nodes))))

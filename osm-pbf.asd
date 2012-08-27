@@ -12,4 +12,5 @@
   :depends-on (:zlib)
   :components ((:protobuf-source-file "osmformat")
                (:protobuf-source-file "fileformat")
-               (:file "osm-reader" :depends-on ("osmformat" "fileformat"))))
+               (:file "b-tree")
+               (:file "osm-reader" :depends-on ("osmformat" "fileformat" "b-tree"))))

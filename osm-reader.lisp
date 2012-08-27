@@ -13,7 +13,7 @@
 
 (defvar *last-block-processed* nil)
 
-(defun read-osm-file (&key (file-name #p"/home/yuri/work/globus/osm/UA.osm.pbf") (skip-to-block 0) count)
+(defun read-osm-file (&key (file-name #p"/home/yuri/work/globus/osm/UA.osm.pbf") (skip-to-block 0) count process-only)
   (with-open-file (fs file-name :direction :input :element-type 'unsigned-byte)
     (do ((i 0 (1+ i))
          (file-size (file-length fs))
@@ -22,7 +22,8 @@
         ((>= file-pos file-size) nil)
       (let ((blob-header-len-buf (make-array 4 :element-type '(unsigned-byte 8))))
         (read-sequence blob-header-len-buf fs)
-        ;;(format t "================================= :~A [~,1F %]~%blob-header-len-buf ~A~%" file-pos (* (/ file-pos file-size) 100.0) blob-header-len-buf)
+        (format t "================================= ~A :~A [~,1F %]~%" i file-pos (* (/ file-pos file-size) 100.0))
+        ;;(format t "blob-header-len-buf ~A~%" blob-header-len-buf)
         (let ((blob-header-len 0))
           (loop for d across blob-header-len-buf
              do (setf blob-header-len (logior (ash blob-header-len 8) d)))
@@ -48,11 +49,14 @@
                               ((string= (pb:string-value (osmpbf:type blob-header)) "OSMHeader")
                                (read-osm-header data))
                               ((string= (pb:string-value (osmpbf:type blob-header)) "OSMData")
-                               (read-osm-data data)
+                               (read-osm-data data process-only)
                                (incf proc-count)
                                (when (and count (>= proc-count count))
                                  (return-from read-osm-file)))))
                         (condition (c) (format t "!!! data decode error ~A~%" c)))))))))))))
+
+;; 1169 - ways
+;; 1303 - relations
 
 (defun read-osm-header (data)
   (let ((header (make-instance 'osmpbf:header-block)))
@@ -80,6 +84,19 @@
   (id 0 :type (unsigned-byte 64))
   (refs (make-array 0 :element-type '(unsigned-byte 64)) :type (simple-array (unsigned-byte 64) (*)))
   (tags nil :type list))
+
+(defstruct rel-member
+  (id 0 :type (unsigned-byte 64))
+  (role "" :type string)
+  (type 0 :type (unsigned-byte 8)))
+
+(defstruct relation
+  (id 0 :type (unsigned-byte 64))
+  (tags nil :type list)
+  (members (make-array 0 :element-type 'rel-member :initial-element (make-rel-member)) :type (simple-array rel-member (*))))
+
+(defvar *ways-to-dump* (make-hash-table :test 'eq))
+(defvar *nodes-to-dump* (make-hash-table :test 'eq))
 
 (defun find-tag (tags key)
   (dolist (tag tags)
@@ -121,45 +138,82 @@
                   (setf (node-id node) id
                         (node-lat node) lat
                         (node-lon node) lon))
+              (when (gethash (node-id node) *nodes-to-dump*)
+                ;; TODO: dump node here
+                )
               (setf (aref nodes i) node
                     prev-node node)))
     (read-keys-values-arr (osmpbf:keys-vals dn) st-arr nodes)
     nodes))
+
+(defun read-keyval-parr (keys vals st)
+  "read parallel array of keys and values and form a list of cons cells containing corresponding strings from string table"
+  (let ((res nil))
+    (loop for key across keys
+         for val across vals
+         do (setf res
+                  (cons (cons (aref st key) (aref st val))
+                        res)))
+    res))
 
 (defun read-ways (ways st-arr)
   (let ((new-ways (make-array (length ways) :element-type 'way :initial-element (make-way))))
     (loop for way across ways
          for i from 0
          do (let ((new-way (make-way :id (osmpbf:id way)
-                                 :refs (make-array (length (osmpbf:refs way)) :element-type '(unsigned-byte 64) :initial-element 0)))
+                                     :tags (read-keyval-parr (osmpbf:keys way) (osmpbf:vals way) st-arr)
+                                     :refs (make-array (length (osmpbf:refs way)) :element-type '(unsigned-byte 64) :initial-element 0)))
                   (prev-ref 0))
               (loop for rr across (osmpbf:refs way)
                    for j from 0
                    do (let ((new-ref (+ prev-ref rr)))
+                        (when (gethash (way-id new-way) *ways-to-dump*)
+                          (setf (gethash new-ref *nodes-to-dump*) t))
                         (setf (aref (way-refs new-way) j) new-ref
                               prev-ref new-ref)))
-              (loop for key across (osmpbf:keys way)
-                   for val across (osmpbf:vals way)
-                   do (setf (way-tags new-way)
-                            (cons (cons (aref st-arr key) (aref st-arr val))
-                                  (way-tags new-way))))
-              (let ((name (cdr (find-tag (way-tags new-way) "name"))))
-                (when (and (find-tag (way-tags new-way) "boundary")
-                           (not (find-tag (way-tags new-way) "waterway"))
-                           (> (length (way-tags new-way)) 2))
-                  (when (= (aref (way-refs new-way) 0)
-                           (aref (way-refs new-way) (1- (length (way-refs new-way)))))
-                    (format t "===:="))
-                  (let ((*print-pretty* nil))
-                    (format t "~A ~A~%" name (way-tags new-way)))))
+              (when (gethash (way-id new-way) *ways-to-dump*)
+                ;; TODO: dump this way here
+                )
               (setf (aref new-ways i) new-way)))
     new-ways))
 
+(defun read-relations (rels st-arr)
+  (let ((new-rels (make-array (length rels) :element-type 'relation :initial-element (make-relation))))
+    (loop for rel across rels
+         for i from 0
+         do (let ((new-rel (make-relation :id (osmpbf:id rel) :tags (read-keyval-parr (osmpbf:keys rel) (osmpbf:vals rel) st-arr))))
+              (unless (zerop (length (osmpbf:roles-sid rel)))
+                (setf (relation-members new-rel) (make-array (length (osmpbf:roles-sid rel)) :element-type 'rel-member :initial-element (make-rel-member)))
+                (let ((prev-mem-id 0))
+                  (loop for role-sid across (osmpbf:roles-sid rel)
+                     for memid across (osmpbf:memids rel)
+                     for type across (osmpbf:types rel)
+                     for j from 0
+                     do (let ((new-rel-member (make-rel-member :id (+ prev-mem-id memid)
+                                                               :type type
+                                                               :role (aref st-arr role-sid))))
+                          (setf prev-mem-id (rel-member-id new-rel-member)
+                                (aref (relation-members new-rel) j) new-rel-member)))))
+              (setf (aref new-rels i) new-rel)
+              (when (equal (cdr (find-tag (relation-tags new-rel) "boundary")) "administrative")
+                (loop for member across (relation-members new-rel)
+                   do (progn
+                        (when (= (rel-member-type member) 1)
+                          (setf (gethash (rel-member-id member) *ways-to-dump*) t))
+                        (when (= (rel-member-type member) 0)
+                          (setf (gethash (rel-member-id member) *nodes-to-dump*) t))))
+                ;; TODO: dump relation here
+                ;; (let ((*print-pretty* nil))
+                ;;   (format t "~A~%" (relation-tags new-rel)))
+                )))
+    new-rels))
+
 (defvar *last-dense* nil)
 (defvar *last-ways* nil)
+(defvar *last-relations* nil)
 (defvar *last-string-table* nil)
 
-(defun read-osm-data (data)
+(defun read-osm-data (data process-only)
   (let ((pblock (make-instance 'osmpbf:primitive-block)))
     (pb:merge-from-array pblock data 0 (length data))
     ;; (format t "pblock ======~%")
@@ -178,8 +232,18 @@
                  (setf *last-dense* (osmpbf:dense pgroup)))
                (unless (zerop (length (osmpbf:ways pgroup)))
                  (setf *last-ways* (osmpbf:ways pgroup)))
-               
-               (read-ways (osmpbf:ways pgroup) string-table)
+               (unless (zerop (length (osmpbf:relations pgroup)))
+                 (setf *last-relations* (osmpbf:relations pgroup)))
+
+               (when (or (not process-only) (eq process-only :nodes))
+                 (when (osmpbf:has-dense pgroup)
+                   (unpack-dense (osmpbf:dense pgroup) string-table)))
+
+               (when (or (not process-only) (eq process-only :ways))
+                 (read-ways (osmpbf:ways pgroup) string-table))
+
+               (when (or (not process-only) (eq process-only :relations))
+                 (read-relations (osmpbf:relations pgroup) string-table))
                
                ;; (format t " pgroup ~A ==~%  nodes ~A~%  dense ~A~%  ways ~A~%  relations ~A~%  changesets ~A~%"
                ;;         pgidx

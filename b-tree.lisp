@@ -2,7 +2,9 @@
   (:use :cl)
   (:export :binsert
            :bsearch
-           :make-empty-btree))
+           :make-empty-btree
+           :btree-print-level
+           :btree-size))
 
 (in-package :b-tree)
 
@@ -147,7 +149,16 @@
         (let ((new-level (1- level)))
           (loop for ptr across (bnode-pointers node)
                do (when ptr (bnode-print-level (car ptr) new-level stream))))
-        (format stream "~%"))))
+        (when (= 1 level) (format stream "~%")))))
 
 (defun btree-print-level (tree level &optional (stream t))
   (bnode-print-level (car (btree-root tree)) level stream))
+
+(defun bnode-subtree-size (node)
+  (if (eq (bnode-kind node) :leaf)
+      (bnode-size node)
+      (loop for child across (bnode-pointers node)
+           summing (if child (bnode-subtree-size (car child)) 0))))
+
+(defun btree-size (tree)
+  (bnode-subtree-size (car (btree-root tree))))

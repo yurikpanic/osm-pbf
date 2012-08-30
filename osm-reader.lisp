@@ -1,5 +1,6 @@
 (defpackage :osm-reader
-  (:use :cl))
+  (:use :cl
+        :b-tree))
 
 (in-package :osm-reader)
 
@@ -98,6 +99,8 @@
 (defvar *ways-to-dump* (make-hash-table :test 'eq))
 (defvar *nodes-to-dump* (make-hash-table :test 'eq))
 
+(defparameter *nodes-btree* (make-empty-btree))
+
 (defun find-tag (tags key)
   (dolist (tag tags)
     (when (string= (car tag) key)
@@ -140,7 +143,7 @@
                         (node-lon node) lon))
               (when (gethash (node-id node) *nodes-to-dump*)
                 ;; TODO: dump node here
-                )
+                (binsert *nodes-btree* (node-id node) node))
               (setf (aref nodes i) node
                     prev-node node)))
     (read-keys-values-arr (osmpbf:keys-vals dn) st-arr nodes)

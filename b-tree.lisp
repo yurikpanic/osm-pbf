@@ -139,3 +139,15 @@
   (declare (type btree tree)
            (type (unsigned-byte 64) key))
   (tree-search (car (btree-root tree)) key))
+
+(defun bnode-print-level (node level &optional (stream t))
+  (if (zerop level)
+      (format stream "~A " (bnode-keys node))
+      (when (eq (bnode-kind node) :node)
+        (let ((new-level (1- level)))
+          (loop for ptr across (bnode-pointers node)
+               do (when ptr (bnode-print-level (car ptr) new-level stream))))
+        (format stream "~%"))))
+
+(defun btree-print-level (tree level &optional (stream t))
+  (bnode-print-level (car (btree-root tree)) level stream))

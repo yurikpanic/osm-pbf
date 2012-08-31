@@ -4,7 +4,9 @@
            :bsearch
            :make-empty-btree
            :btree-print-level
-           :btree-size))
+           :btree-size
+           :btree-nodes-count
+           :btree-data-list))
 
 (in-package :b-tree)
 
@@ -158,7 +160,33 @@
   (if (eq (bnode-kind node) :leaf)
       (bnode-size node)
       (loop for child across (bnode-pointers node)
+           for i from 0 to (bnode-size node)
            summing (if child (bnode-subtree-size (car child)) 0))))
 
 (defun btree-size (tree)
   (bnode-subtree-size (car (btree-root tree))))
+
+(defun bnode-subtree-nodes-count (node)
+  (if (eq (bnode-kind node) :leaf)
+      (values 0 1)
+      (let ((nodes 1)
+            (leaves 0))
+        (loop for child across (bnode-pointers node)
+           for i from 0 to (bnode-size node)
+           do (when child
+                (multiple-value-bind (nn ll)
+                    (bnode-subtree-nodes-count (car child))
+                  (incf nodes nn)
+                  (incf leaves ll))))
+        (values nodes leaves))))
+
+(defun btree-nodes-count (tree)
+  (bnode-subtree-nodes-count (car (btree-root tree))))
+
+(defun bnode-data-list (node)
+  (if (eq (bnode-kind node) :leaf)
+      (aref (bnode-pointers node) 1)
+      (bnode-data-list (car (aref (bnode-pointers node) 0)))))
+
+(defun btree-data-list (tree)
+  (bnode-data-list (car (btree-root tree))))

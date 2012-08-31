@@ -54,7 +54,10 @@
                                (incf proc-count)
                                (when (and count (>= proc-count count))
                                  (return-from read-osm-file)))))
-                        (condition (c) (format t "!!! data decode error ~A~%" c)))))))))))))
+                        (condition (c) (progn
+                                         (format t "!!! data decode error ~A ~A~%" c (osmpbf:raw-size blob))
+                                         (with-open-file (bb (format nil "/home/yuri/work/globus/osm/zerror-~D" i) :element-type '(unsigned-byte 8) :direction :output)
+                                           (write-sequence (osmpbf:zlib-data blob) bb)))))))))))))))
 
 ;; 1169 - ways
 ;; 1303 - relations

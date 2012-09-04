@@ -1,6 +1,8 @@
 (defpackage :osm-reader
   (:use :cl
-        :b-tree))
+        :b-tree
+        :osm-writer
+        :in-mem-str))
 
 (in-package :osm-reader)
 
@@ -14,7 +16,7 @@
 
 (defvar *last-block-processed* nil)
 
-(defun read-osm-file (&key (file-name #p"/home/yuri/work/globus/osm/UA.osm.pbf") (skip-to-block 0) count process-only)
+(defun read-osm-file (&key (file-name #p"/home/yuri/work/globus/osm/ukraine.osm.pbf") (skip-to-block 0) count process-only)
   (with-open-file (fs file-name :direction :input :element-type 'unsigned-byte)
     (do ((i 0 (1+ i))
          (file-size (file-length fs))
@@ -24,16 +26,16 @@
       (let ((blob-header-len-buf (make-array 4 :element-type '(unsigned-byte 8))))
         (read-sequence blob-header-len-buf fs)
         (format t "================================= ~A :~A [~,1F %]~%" i file-pos (* (/ file-pos file-size) 100.0))
-        ;;(format t "blob-header-len-buf ~A~%" blob-header-len-buf)
+        (format t "blob-header-len-buf ~A~%" blob-header-len-buf)
         (let ((blob-header-len 0))
           (loop for d across blob-header-len-buf
              do (setf blob-header-len (logior (ash blob-header-len 8) d)))
-          ;;(format t "blob-header-len ~A~%" blob-header-len)
+          (format t "blob-header-len ~A~%" blob-header-len)
           (let ((blob-header-buf (make-array blob-header-len :element-type '(unsigned-byte 8))))
             (read-sequence blob-header-buf fs)
             (let ((blob-header (make-instance 'osmpbf:blob-header)))
               (pb:merge-from-array blob-header blob-header-buf 0 blob-header-len)
-              ;;(format t "blob-header ~A ~A~%" i blob-header)
+              (format t "blob-header ~A ~A~%" i blob-header)
               (if (< i skip-to-block)
                   (file-position fs (+ (file-position fs) (osmpbf:datasize blob-header)))
                   (let ((blob-buf (make-array (osmpbf:datasize blob-header) :element-type '(unsigned-byte 8))))
@@ -41,7 +43,7 @@
                     (read-sequence blob-buf fs)
                     (let ((blob (make-instance 'osmpbf:blob)))
                       (pb:merge-from-array blob blob-buf 0 (length blob-buf))
-                      ;;(print-blob-descr blob)
+                      (print-blob-descr blob)
                       (handler-case
                           (let ((data (if (osmpbf:has-raw blob)
                                           (osmpbf:raw blob)
@@ -56,16 +58,19 @@
                                  (return-from read-osm-file)))))
                         (condition (c) (progn
                                          (format t "!!! data decode error ~A ~A~%" c (osmpbf:raw-size blob))
-                                         (with-open-file (bb (format nil "/home/yuri/work/globus/osm/zerror-~D" i) :element-type '(unsigned-byte 8) :direction :output)
+                                         (with-open-file (bb (format nil "/home/yuri/work/globus/osm/zerror-~D" i) :element-type '(unsigned-byte 8) :direction :output :if-exists :supersede)
                                            (write-sequence (osmpbf:zlib-data blob) bb)))))))))))))))
 
 ;; 1169 - ways
 ;; 1303 - relations
 
+(defparameter *orig-header* nil)
+
 (defun read-osm-header (data)
   (let ((header (make-instance 'osmpbf:header-block)))
     (pb:merge-from-array header data 0 (length data))
-    ;; (format t "header ======~%~A~%" header)
+    ;;(format t "header ======~%~A~%" header)
+    (setf *orig-header* header)
     ))
 
 (defun read-string-table (st)
@@ -77,27 +82,6 @@
                    (coerce st-entry
                            '(simple-array (unsigned-byte 8) (*))))))
     st-converted))
-
-(defstruct node
-  (id 0 :type (unsigned-byte 64))
-  (lon 0 :type (unsigned-byte 64))
-  (lat 0 :type (unsigned-byte 64))
-  (tags nil :type list))
-
-(defstruct way
-  (id 0 :type (unsigned-byte 64))
-  (refs (make-array 0 :element-type '(unsigned-byte 64)) :type (simple-array (unsigned-byte 64) (*)))
-  (tags nil :type list))
-
-(defstruct rel-member
-  (id 0 :type (unsigned-byte 64))
-  (role "" :type string)
-  (type 0 :type (unsigned-byte 8)))
-
-(defstruct relation
-  (id 0 :type (unsigned-byte 64))
-  (tags nil :type list)
-  (members (make-array 0 :element-type 'rel-member :initial-element (make-rel-member)) :type (simple-array rel-member (*))))
 
 (defvar *ways-to-dump* (make-hash-table :test 'eq))
 (defvar *nodes-to-dump* (make-hash-table :test 'eq))
@@ -222,10 +206,10 @@
 (defun read-osm-data (data process-only)
   (let ((pblock (make-instance 'osmpbf:primitive-block)))
     (pb:merge-from-array pblock data 0 (length data))
-    ;; (format t "pblock ======~%")
-    ;; (format t "granularity ~A~%" (osmpbf:granularity pblock))
-    ;; (format t "lat-offset ~A~%" (osmpbf:lat-offset pblock))
-    ;; (format t "lon-offset ~A~%" (osmpbf:lon-offset pblock))
+    (format t "pblock ======~%")
+    (format t "granularity ~A~%" (osmpbf:granularity pblock))
+    (format t "lat-offset ~A~%" (osmpbf:lat-offset pblock))
+    (format t "lon-offset ~A~%" (osmpbf:lon-offset pblock))
     (let ((string-table (read-string-table (osmpbf:s (osmpbf:stringtable pblock)))))
       ;;(format t "string-table with ~A entries~%" (length string-table))
       (setf *last-string-table* string-table)

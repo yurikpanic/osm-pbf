@@ -13,5 +13,6 @@
   :components ((:protobuf-source-file "osmformat")
                (:protobuf-source-file "fileformat")
                (:file "b-tree")
-               (:file "osm-writer" :depends-on ("osmformat" "fileformat" "b-tree"))
-               (:file "osm-reader" :depends-on ("osmformat" "fileformat" "b-tree" "osm-writer"))))
+               (:file "in-mem-str")
+               (:file "osm-writer" :depends-on ("osmformat" "fileformat" "b-tree" "in-mem-str"))
+               (:file "osm-reader" :depends-on ("osmformat" "fileformat" "b-tree" "osm-writer" "in-mem-str"))))

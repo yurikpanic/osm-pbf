@@ -26,16 +26,16 @@
       (let ((blob-header-len-buf (make-array 4 :element-type '(unsigned-byte 8))))
         (read-sequence blob-header-len-buf fs)
         (format t "================================= ~A :~A [~,1F %]~%" i file-pos (* (/ file-pos file-size) 100.0))
-        (format t "blob-header-len-buf ~A~%" blob-header-len-buf)
+        ;;(format t "blob-header-len-buf ~A~%" blob-header-len-buf)
         (let ((blob-header-len 0))
           (loop for d across blob-header-len-buf
              do (setf blob-header-len (logior (ash blob-header-len 8) d)))
-          (format t "blob-header-len ~A~%" blob-header-len)
+          ;;(format t "blob-header-len ~A~%" blob-header-len)
           (let ((blob-header-buf (make-array blob-header-len :element-type '(unsigned-byte 8))))
             (read-sequence blob-header-buf fs)
             (let ((blob-header (make-instance 'osmpbf:blob-header)))
               (pb:merge-from-array blob-header blob-header-buf 0 blob-header-len)
-              (format t "blob-header ~A ~A~%" i blob-header)
+              ;;(format t "blob-header ~A ~A~%" i blob-header)
               (if (< i skip-to-block)
                   (file-position fs (+ (file-position fs) (osmpbf:datasize blob-header)))
                   (let ((blob-buf (make-array (osmpbf:datasize blob-header) :element-type '(unsigned-byte 8))))
@@ -43,7 +43,7 @@
                     (read-sequence blob-buf fs)
                     (let ((blob (make-instance 'osmpbf:blob)))
                       (pb:merge-from-array blob blob-buf 0 (length blob-buf))
-                      (print-blob-descr blob)
+                      ;;(print-blob-descr blob)
                       (handler-case
                           (let ((data (if (osmpbf:has-raw blob)
                                           (osmpbf:raw blob)
@@ -64,7 +64,7 @@
 ;; 1169 - ways
 ;; 1303 - relations
 
-(defparameter *orig-header* nil)
+(defvar *orig-header* nil)
 
 (defun read-osm-header (data)
   (let ((header (make-instance 'osmpbf:header-block)))
@@ -85,8 +85,9 @@
 
 (defvar *ways-to-dump* (make-hash-table :test 'eq))
 (defvar *nodes-to-dump* (make-hash-table :test 'eq))
+(defvar *nodes-dump-reverse-order* nil)
 
-(defparameter *nodes-btree* (make-empty-btree))
+(defvar *nodes-btree* (make-empty-btree 20))
 
 (defun find-tag (tags key)
   (dolist (tag tags)
@@ -129,7 +130,6 @@
                         (node-lat node) lat
                         (node-lon node) lon))
               (when (gethash (node-id node) *nodes-to-dump*)
-                ;; TODO: dump node here
                 (binsert *nodes-btree* (node-id node) node))
               (setf (aref nodes i) node
                     prev-node node)))
@@ -158,6 +158,8 @@
                    for j from 0
                    do (let ((new-ref (+ prev-ref rr)))
                         (when (gethash (way-id new-way) *ways-to-dump*)
+                          (unless (gethash new-ref *nodes-to-dump*)
+                            (setf *nodes-dump-reverse-order* (cons new-ref *nodes-dump-reverse-order*)))
                           (setf (gethash new-ref *nodes-to-dump*) t))
                         (setf (aref (way-refs new-way) j) new-ref
                               prev-ref new-ref)))
@@ -191,6 +193,9 @@
                         (when (= (rel-member-type member) 1)
                           (setf (gethash (rel-member-id member) *ways-to-dump*) t))
                         (when (= (rel-member-type member) 0)
+                          (unless (gethash (rel-member-id member) *nodes-to-dump*)
+                            ;; add node to list only if it is not yet in hash - some nodes belong to many relations
+                            (setf *nodes-dump-reverse-order* (cons (rel-member-id member) *nodes-dump-reverse-order*)))
                           (setf (gethash (rel-member-id member) *nodes-to-dump*) t))))
                 ;; TODO: dump relation here
                 ;; (let ((*print-pretty* nil))
@@ -206,10 +211,10 @@
 (defun read-osm-data (data process-only)
   (let ((pblock (make-instance 'osmpbf:primitive-block)))
     (pb:merge-from-array pblock data 0 (length data))
-    (format t "pblock ======~%")
-    (format t "granularity ~A~%" (osmpbf:granularity pblock))
-    (format t "lat-offset ~A~%" (osmpbf:lat-offset pblock))
-    (format t "lon-offset ~A~%" (osmpbf:lon-offset pblock))
+    ;; (format t "pblock ======~%")
+    ;; (format t "granularity ~A~%" (osmpbf:granularity pblock))
+    ;; (format t "lat-offset ~A~%" (osmpbf:lat-offset pblock))
+    ;; (format t "lon-offset ~A~%" (osmpbf:lon-offset pblock))
     (let ((string-table (read-string-table (osmpbf:s (osmpbf:stringtable pblock)))))
       ;;(format t "string-table with ~A entries~%" (length string-table))
       (setf *last-string-table* string-table)
@@ -245,3 +250,18 @@
                ;;         (length (osmpbf:relations pgroup))
                ;;         (length (osmpbf:changesets pgroup)))
                ))))))
+
+
+(defun save-collected-data ()
+  (let ((w (begin-write :bbox (osmpbf:bbox *orig-header*))))
+    (dolist (node-id (reverse *nodes-dump-reverse-order*))
+      (let ((node (bsearch *nodes-btree* node-id)))
+        (when node
+          (write-node w node))))
+    (flush-write w)
+    (let* ((bpbf (btree-to-pbf *nodes-btree* #'make-node-index-arr "node-id"))
+           (size (pb:octet-size bpbf))
+           (buf (make-array size :element-type '(unsigned-byte 8))))
+      (pb:serialize bpbf buf 0 size)
+      (write-blob w buf :type "btree"))
+    (end-write w)))

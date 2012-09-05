@@ -1,0 +1,18 @@
+package btreepbf;
+
+message Bnode {
+    enum Kind {
+        LEAF = 0;
+        NODE = 1;
+    }
+    required Kind kind = 1 [default = LEAF];
+    repeated uint64 keys = 2 [packed = true];
+    repeated uint64 pointers = 3 [packed = true];
+    repeated bytes values = 4;
+}
+
+message Btree {
+    required uint32 max_children = 1;
+    repeated Bnode nodes = 2;
+    optional string type = 3;
+}

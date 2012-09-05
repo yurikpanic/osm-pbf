@@ -3,7 +3,9 @@
         :b-tree
         :in-mem-str)
   (:export :begin-write
+           :flush-write
            :end-write
+           :write-blob
            :write-node))
 
 (in-package :osm-writer)
@@ -44,6 +46,7 @@
       (setf (write-descr-st-hash wd) (make-hash-table :test 'equal)
             (write-descr-st-hash-by-pos wd) (make-hash-table :test 'eq)
             (write-descr-node-idx wd) 0
+            (write-descr-st-count wd) 0
             (write-descr-pgroup wd) (make-instance 'osmpbf:primitive-group))
       wd)))
 
@@ -79,24 +82,21 @@
                                 (osmpbf:s st)))
     st))
 
-(defun save-cur-data (wd)
+(defun flush-write (wd)
   (let ((pblock (make-instance 'osmpbf:primitive-block))
         (st (make-string-table wd)))
     (setf (osmpbf:stringtable pblock) st)
     (vector-push-extend (write-descr-pgroup wd) (osmpbf:primitivegroup pblock))
     (let* ((size (pb:octet-size pblock))
            (buf (make-array size :element-type '(unsigned-byte 8))))
-      (format t "pblock size ~A ~A ~A~%" size (pb:octet-size st) (pb:octet-size (write-descr-pgroup wd)))
-      (format t "pblock ~A~%" pblock)
       (pb:serialize pblock buf 0 size)
       (let ((ppb (make-instance 'osmpbf:primitive-block)))
-        (pb:merge-from-array ppb buf 0 size)
-        (format t "ppb ~A~%" ppb))
+        (pb:merge-from-array ppb buf 0 size))
       (write-blob wd buf))))
 
 (defun end-write (wd)
   (unless (zerop (blob-elts-count wd))
-    (save-cur-data wd))
+    (flush-write wd))
   (close (write-descr-stream wd)))
 
 (defun st-entry (wd string)
@@ -134,5 +134,5 @@
     (vector-push-extend pbnode
                         (osmpbf:nodes (write-descr-pgroup wd))))
   (when (>= (blob-elts-count wd) +def-items-per-page+)
-    (save-cur-data wd))
+    (flush-write wd))
   wd)

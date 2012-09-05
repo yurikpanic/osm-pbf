@@ -1,0 +1,6 @@
+package btreepbf;
+
+message BlobIndex {
+    required uint64 blob_num = 1;
+    required uint64 blob_elt = 2;
+}

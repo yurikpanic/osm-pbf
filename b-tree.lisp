@@ -7,7 +7,13 @@
            :btree-size
            :btree-nodes-count
            :btree-data-list
-           :btree-to-pbf))
+
+           :btree-max-children
+           :btree-root
+           :bnode-kind
+           :bnode-keys
+           :bnode-size
+           :bnode-pointers))
 
 (in-package :b-tree)
 
@@ -191,28 +197,3 @@
 
 (defun btree-data-list (tree)
   (bnode-data-list (car (btree-root tree))))
-
-(defun bnode-to-pbf (pbtree node serialize-values-fn)
-  (let ((pbnode (make-instance 'btreepbf:bnode)))
-    (when (eq (bnode-kind node) :node)
-      (setf (btreepbf:kind pbnode) btreepbf:+bnode-kind-node+))
-    (loop for key across (bnode-keys node)
-         for i from 0 below (bnode-size node)
-         do (vector-push-extend key (btreepbf:keys pbnode)))
-    (let ((nodes-arr-idx (vector-push-extend pbnode (btreepbf:nodes pbtree))))
-      (when (eq (bnode-kind node) :node)
-        (loop for pnt across (bnode-pointers node)
-             for i from 0 to (bnode-size node)
-             do (vector-push-extend (bnode-to-pbf pbtree (car pnt) serialize-values-fn) (btreepbf:pointers pbnode))))
-      (when (eq (bnode-kind node) :leaf)
-        (loop for i from 1 to (bnode-size node)
-           do (let ((val (car (aref (bnode-pointers node) i))))
-                (vector-push-extend (funcall serialize-values-fn val) (btreepbf:values pbnode)))))
-      nodes-arr-idx)))
-
-(defun btree-to-pbf (tree serialize-values-fn &optional type-str)
-  (let ((pbtree (make-instance 'btreepbf:btree)))
-    (setf (btreepbf:max-children pbtree) (btree-max-children tree))
-    (when type-str (setf (btreepbf:type pbtree) (pb:string-field type-str)))
-    (bnode-to-pbf pbtree (car (btree-root tree)) serialize-values-fn)
-    pbtree))

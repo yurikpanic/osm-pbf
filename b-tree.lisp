@@ -10,10 +10,14 @@
 
            :btree-max-children
            :btree-root
+           
            :bnode-kind
            :bnode-keys
            :bnode-size
-           :bnode-pointers))
+           :bnode-pointers
+           :bnode-data
+
+           :btree-clear-nodes-data))
 
 (in-package :b-tree)
 
@@ -21,7 +25,10 @@
   (kind :leaf :type keyword)
   (keys (make-array 0 :element-type '(unsigned-byte 64)) :type (simple-array (unsigned-byte 64) (*)))
   (size 0 :type number)
-  (pointers (make-array 0 :element-type 'list :initial-element nil) :type (simple-array list (*))))
+  (pointers (make-array 0 :element-type 'list :initial-element nil) :type (simple-array list (*)))
+  ;; additional data field - can be used to store addidtional data, while manipulating a tree with functions other then in this package
+  ;; we are going to use it to store data structures to store tree to file
+  (data nil :type list))
 
 (defstruct btree
   (max-children 6 :type (unsigned-byte 16))
@@ -197,3 +204,15 @@
 
 (defun btree-data-list (tree)
   (bnode-data-list (car (btree-root tree))))
+
+(defun bnode-subtree-clear-data (node)
+  (setf (bnode-data node) nil)
+  (when (eq (bnode-kind node) :node)
+    (loop for child across (bnode-pointers node)
+         for i from 0 to (bnode-size node)
+         do (when child
+              (bnode-subtree-clear-data (car child))))))
+
+(defun btree-clear-nodes-data (tree)
+  "clear additional data field in bnodes"
+  (bnode-subtree-clear-data (car (btree-root tree))))

@@ -259,9 +259,5 @@
         (when node
           (write-node w node))))
     (flush-write w)
-    (let* ((bpbf (btree-to-pbf *nodes-btree* #'make-node-index-arr "node-id"))
-           (size (pb:octet-size bpbf))
-           (buf (make-array size :element-type '(unsigned-byte 8))))
-      (pb:serialize bpbf buf 0 size)
-      (write-blob w buf :type "btree"))
+    (write-btree w *nodes-btree* #'make-node-index-arr "node" "id")
     (end-write w)))

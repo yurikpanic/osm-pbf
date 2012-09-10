@@ -8,7 +8,7 @@
   :description "Reading of OSM PBF format"
   :version "0.1"
   :author "Yuri Vishnevsky <vishnevsky@gmail.com>"
-  :defsystem-depends-on (protobuf)
+  :defsystem-depends-on (protobuf zlib)
   :depends-on (:zlib)
   :components ((:protobuf-source-file "osmformat")
                (:protobuf-source-file "fileformat")
@@ -16,5 +16,6 @@
                (:protobuf-source-file "osmbtree")
                (:file "b-tree" :depends-on ("btree"))
                (:file "in-mem-str" :depends-on ("osmbtree"))
+               (:file "osm-index-search" :depends-on ("osmformat" "fileformat" "btree"))
                (:file "osm-writer" :depends-on ("osmformat" "fileformat" "b-tree" "in-mem-str"))
                (:file "osm-reader" :depends-on ("osmformat" "fileformat" "b-tree" "osm-writer" "in-mem-str"))))

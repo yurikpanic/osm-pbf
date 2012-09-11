@@ -92,8 +92,6 @@
       (let* ((size (pb:octet-size pblock))
              (buf (make-array size :element-type '(unsigned-byte 8))))
         (pb:serialize pblock buf 0 size)
-        (let ((ppb (make-instance 'osmpbf:primitive-block)))
-          (pb:merge-from-array ppb buf 0 size))
         (write-blob wd buf)))))
 
 (defun end-write (wd)

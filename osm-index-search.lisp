@@ -143,8 +143,9 @@
     (when val
       (let ((blob-idx (make-instance 'btreepbf:blob-index)))
         (pb:merge-from-array blob-idx val 0 (length val))
+        (format t "~A~%" blob-idx)
         (if (and (btreepbf:has-blob-offs blob-idx) (btreepbf:has-size blob-idx))
-            (get-node-entry-in-blob sd (btreepbf:blob-num blob-idx) (btreepbf:blob-elt blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx)
+            (get-node-entry-in-blob sd (btreepbf:blob-num blob-idx) (btreepbf:blob-elt blob-idx) ;;(btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx)
                                     )
             (get-node-entry-in-blob sd (btreepbf:blob-num blob-idx) (btreepbf:blob-elt blob-idx)))))))
 

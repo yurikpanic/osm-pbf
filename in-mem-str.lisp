@@ -3,6 +3,7 @@
   (:export :node :make-node
            :node-id :node-lon :node-lat :node-tags
            :node-blob-num :node-blob-elt :node-tags-st
+           :node-offs-in-blob :node-pb-size
            :make-node-index-arr
 
            :way :make-way
@@ -23,12 +24,16 @@
   (tags nil :type list)
   (tags-st nil :type list)
   (blob-num 0 :type integer)
-  (blob-elt 0 :type integer))
+  (blob-elt 0 :type integer)
+  (offs-in-blob 0 :type (unsigned-byte 64))
+  (pb-size 0 :type (unsigned-byte 64)))
 
 (defun make-node-index-arr (node)
   (let ((blob-index (make-instance 'btreepbf:blob-index)))
     (setf (btreepbf:blob-num blob-index) (node-blob-num node)
-          (btreepbf:blob-elt blob-index) (node-blob-elt node))
+          (btreepbf:blob-elt blob-index) (node-blob-elt node)
+          (btreepbf:blob-offs blob-index) (node-offs-in-blob node)
+          (btreepbf:size blob-index) (node-pb-size node))
     (let* ((size (pb:octet-size blob-index))
            (buf (make-array size :element-type '(unsigned-byte 8))))
       (pb:serialize blob-index buf 0 size)

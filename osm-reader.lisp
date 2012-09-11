@@ -251,6 +251,11 @@
                ;;         (length (osmpbf:changesets pgroup)))
                ))))))
 
+(defmethod pb:serialize :before ((self osmpbf:node) buffer index limit)
+  (let ((in-mem-node (bsearch *nodes-btree* (osmpbf:id self))))
+    (when in-mem-node
+      (setf (node-offs-in-blob in-mem-node) (+ 4 index)
+            (node-pb-size in-mem-node) (pb:octet-size self)))))
 
 (defun save-collected-data ()
   (let ((w (begin-write :bbox (osmpbf:bbox *orig-header*))))

@@ -54,23 +54,28 @@
                  f))
     sd))
 
-(defun get-btree-in-blob (sd blob-num idx)
-  (with-open-file (fs (search-data-file-name sd) :direction :input :element-type '(unsigned-byte 8))
-    (let ((blob-offset (aref (search-data-blob-offsets sd) blob-num)))
-      (multiple-value-bind (header blob)
-          (load-blob-and-header fs blob-offset)
-        (when (string= (pb:string-value (osmpbf:type header)) "btree")
-          (let ((btree (make-instance 'btreepbf:btree))
-                (data (get-blob-uncompressed-data blob)))
-            (pb:merge-from-array btree data 0 (length data))
-            (aref (btreepbf:nodes btree) idx)))))))
+(defvar *blob-cache* (make-hash-table :test 'eq))
+
+(defun get-btree-entry-in-blob (sd blob-num idx)
+  (let ((btree (gethash blob-num *blob-cache*)))
+    (unless btree
+      (with-open-file (fs (search-data-file-name sd) :direction :input :element-type '(unsigned-byte 8))
+        (let ((blob-offset (aref (search-data-blob-offsets sd) blob-num)))
+          (multiple-value-bind (header blob)
+              (load-blob-and-header fs blob-offset)
+            (when (string= (pb:string-value (osmpbf:type header)) "btree")
+              (let ((data (get-blob-uncompressed-data blob)))
+                (setf btree (make-instance 'btreepbf:btree))
+                (pb:merge-from-array btree data 0 (length data))
+                (setf (gethash blob-num *blob-cache*) btree)))))))
+    (aref (btreepbf:nodes btree) idx)))
 
 (defun get-btree-entry (sd index)
-  ;; when there will be multiple btree indexes - add here parameters to select proper btree (e.g. by struc type and dield name)
+  ;; when there will be multiple btree indexes - add here parameters to select proper btree (e.g. by struc type and field name)
   (loop for entry across (btreepbf:entries (search-data-node-id-btree-idx sd))
        do
        (when (and (>= index (btreepbf:min-node entry)) (<= index (btreepbf:max-node entry)))
-         (return-from get-btree-entry (get-btree-in-blob sd (btreepbf:blob-num entry) (- index (btreepbf:min-node entry)))))))
+         (return-from get-btree-entry (get-btree-entry-in-blob sd (btreepbf:blob-num entry) (- index (btreepbf:min-node entry)))))))
 
 (defun search-btree (sd bnode id)
   (let ((keys-len (length (btreepbf:keys bnode))))
@@ -82,12 +87,13 @@
           (aref (btreepbf:pointers bnode)
                 (if (< id (aref (btreepbf:keys bnode) 0))
                     0
-                    (if (< (aref (btreepbf:keys bnode) (1- keys-len)) id)
-                        (1- keys-len)
-                        (block k-search
-                          (dotimes (i (- keys-len 2))
-                            (when (and (<= (aref (btreepbf:keys bnode) i) id) (< id (aref (btreepbf:keys bnode) (1+ i))))
-                              (return-from k-search (1+ i)))))))))
+                    (or 
+                     (block k-search
+                       (dotimes (i (1- keys-len))
+                         (when (and (<= (aref (btreepbf:keys bnode) i) id) (< id (aref (btreepbf:keys bnode) (1+ i))))
+                           (return-from k-search (1+ i))))
+                       nil)
+                     keys-len))))
          id)
         (progn
           (loop for key across (btreepbf:keys bnode)
@@ -96,20 +102,30 @@
                     (return-from search-btree val)))
           nil))))
 
+(defun get-node-entry-in-blob (sd blob-num idx)
+  (let ((pblock (gethash blob-num *blob-cache*)))
+    (unless pblock
+      (with-open-file (fs (search-data-file-name sd) :element-type '(unsigned-byte 8))
+        (multiple-value-bind (header blob)
+            (load-blob-and-header fs (aref (search-data-blob-offsets sd) blob-num))
+          (when (string= (pb:string-value (osmpbf:type header)) "OSMData")
+            (let ((data (get-blob-uncompressed-data blob)))
+              (setf pblock (make-instance 'osmpbf:primitive-block))
+              (pb:merge-from-array pblock data 0 (length data))
+              (setf (gethash blob-num *blob-cache*) pblock))))))
+    (let ((idx-to-return idx))
+      (loop for pgroup across (osmpbf:primitivegroup pblock)
+         do (let ((cur-nodes-len (length (osmpbf:nodes pgroup))))
+              (if (< idx-to-return cur-nodes-len)
+                  (return-from get-node-entry-in-blob (aref (osmpbf:nodes pgroup) idx-to-return))
+                  (decf idx-to-return cur-nodes-len)))))))
+
 (defun find-node-by-id (sd id)
   (let* ((root (get-btree-entry sd 0))
          (val (search-btree sd root id)))
     (when val
       (let ((blob-idx (make-instance 'btreepbf:blob-index)))
         (pb:merge-from-array blob-idx val 0 (length val))
-        (with-open-file (fs (search-data-file-name sd) :element-type '(unsigned-byte 8))
-          (multiple-value-bind (header blob)
-              (load-blob-and-header fs (aref (search-data-blob-offsets sd) (btreepbf:blob-num blob-idx)))
-            (when (string= (pb:string-value (osmpbf:type header)) "OSMData")
-              (let ((pblock (make-instance 'osmpbf:primitive-block))
-                    (data (get-blob-uncompressed-data blob)))
-                (pb:merge-from-array pblock data 0 (length data))
-                ;; FIXME: need to take int account cases where there are many primitivegroups in block
-                (aref (osmpbf:nodes (aref (osmpbf:primitivegroup pblock) 0)) (btreepbf:blob-elt blob-idx))))))))))
+        (get-node-entry-in-blob sd (btreepbf:blob-num blob-idx) (btreepbf:blob-elt blob-idx))))))
 
 ;; e.g. (find-node-by-id *sd* 337732605)

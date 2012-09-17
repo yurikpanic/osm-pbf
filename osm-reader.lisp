@@ -251,11 +251,28 @@
                ;;         (length (osmpbf:changesets pgroup)))
                ))))))
 
+(defvar *nodes-to-save* nil
+  "A list of node IDs which are already serialized to PrimitiveBlock, but not yet saved to Blob.
+Used to adjust the offset of particular node data in blob.")
+
+;;; compute the offset of particular node in buffer (offset from begining of PrimitiveBlock)
 (defmethod pb:serialize :before ((self osmpbf:node) buffer index limit)
   (let ((in-mem-node (bsearch *nodes-btree* (osmpbf:id self))))
     (when in-mem-node
-      (setf (node-offs-in-blob in-mem-node) (+ 4 index)
-            (node-pb-size in-mem-node) (pb:octet-size self)))))
+      (setf (node-offs-in-blob in-mem-node) index
+            (node-pb-size in-mem-node) (pb:octet-size self)
+            *nodes-to-save* (cons (osmpbf:id self) *nodes-to-save*)))))
+
+;;; Adjust the offset of each node serialized to PrimitiveBlock to be the offset from beginning of Blob
+;;; Code here is somewhat error prone, it will break if we'll have extra data except raw in Blob (like raw_size or zlib_data).
+;;; But this is sufficient for current case, without modifying the guts of protobuf library.
+(defmethod pb:serialize :before ((self osmpbf:blob) buffer index limit)
+  (let ((offs-delta (- (pb:octet-size self) (length (osmpbf:raw self)))))
+    (dolist (node-id *nodes-to-save*)
+      (let ((node (bsearch *nodes-btree* node-id)))
+        (when node
+          (incf (node-offs-in-blob node) offs-delta)))))
+  (setf *nodes-to-save* nil))
 
 (defun save-collected-data ()
   (let ((w (begin-write :bbox (osmpbf:bbox *orig-header*))))

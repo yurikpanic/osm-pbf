@@ -15,7 +15,6 @@
 
 (defstruct write-descr
   (file-name #p"/home/yuri/work/globus/osm/out.osm.pbf" :type pathname)
-  (btree-file #p"/home/yuri/work/globus/osm/out.btree" :type pathname)
   (temp-file #p"/home/yuri/work/globus/osm/out.tmp" :type pathname)
   (stream *standard-output* :type stream)
   (blob-num 0 :type integer)
@@ -29,23 +28,46 @@
   ;; TODO: add other data types here when they be available
   (+ (write-descr-node-idx wd)))
 
-(defun write-blob (wd data &key (type "OSMData"))
+(defmacro write-uint32 (val stream)
+  (let ((i (gensym)))
+    `(loop for ,i from 3 downto 0
+        do (write-byte (logand #xFF (ash ,val (* -8 ,i))) ,stream))))
+
+(defun copy-stream (source dest &optional (buf-size (* 1024 1024)))
+  (let ((copy-buf (make-array buf-size :element-type '(unsigned-byte 8))))
+    (do ((bytes-read #1=(read-sequence copy-buf source) #1#))
+        ((zerop bytes-read) (values))
+      (write-sequence copy-buf dest :end bytes-read))))
+
+(defun write-blob-raw (wd raw-data-list type)
   (let ((blob-header (make-instance 'osmpbf:blob-header))
-        (blob (make-instance 'osmpbf:blob)))
-    (setf (osmpbf:raw blob) data)
+        (data-len (loop for raw-data in raw-data-list
+                       summing
+                       (if (typep raw-data 'stream)
+                           (file-length raw-data)
+                           (length raw-data)))))
     (setf (osmpbf:type blob-header) (pb:string-field type)
-          (osmpbf:datasize blob-header) (pb:octet-size blob))
+          (osmpbf:datasize blob-header) data-len)
     (let* ((size (pb:octet-size blob-header))
            (buf (make-array size :element-type '(unsigned-byte 8))))
       (pb:serialize blob-header buf 0 size)
-      (loop for i from 3 downto 0
-           do (write-byte (logand #xFF (ash size (* -8 i))) (write-descr-stream wd)))
+      (write-uint32 size (write-descr-stream wd))
       (write-sequence buf (write-descr-stream wd))
-      (let* ((size (pb:octet-size blob))
-             (buf (make-array size :element-type '(unsigned-byte 8))))
-        (pb:serialize blob buf 0 size)
-        (write-sequence buf (write-descr-stream wd)))
+      (loop for raw-data in raw-data-list
+           do
+           (if (typep raw-data 'stream)
+               (copy-stream raw-data (write-descr-stream wd))
+               (write-sequence raw-data (write-descr-stream wd))))
       (incf (write-descr-blob-num wd))
+      wd)))
+
+(defun write-blob (wd data &key (type "OSMData"))
+  (let ((blob (make-instance 'osmpbf:blob)))
+    (setf (osmpbf:raw blob) data)
+    (let* ((size (pb:octet-size blob))
+           (buf (make-array size :element-type '(unsigned-byte 8))))
+      (pb:serialize blob buf 0 size)
+      (write-blob-raw wd (list buf) type)
       (setf (write-descr-st-hash wd) (make-hash-table :test 'equal)
             (write-descr-st-hash-by-pos wd) (make-hash-table :test 'eq)
             (write-descr-node-idx wd) 0
@@ -53,10 +75,9 @@
             (write-descr-pgroup wd) (make-instance 'osmpbf:primitive-group))
       wd)))
 
-(defun begin-write (&key file-name bbox btree-file temp-file)
+(defun begin-write (&key file-name bbox temp-file)
   (let ((wd (make-write-descr)))
     (when file-name (setf (write-descr-file-name wd) file-name))
-    (when btree-file (setf (write-descr-temp-file wd) btree-file))
     (when temp-file (setf (write-descr-temp-file wd) temp-file))
     (setf (write-descr-stream wd)
           (open (write-descr-file-name wd) :direction :output :element-type 'unsigned-byte :if-exists :supersede))
@@ -141,6 +162,7 @@
   wd)
 
 (defun write-btree (wd tree serialize-values-fn &optional type-str field-str)
+  (flush-write wd)
   (let ((root-pos nil)
         (root-size nil))
     (with-open-file (fs (write-descr-temp-file wd) :direction :output :element-type '(unsigned-byte 8) :if-exists :supersede)
@@ -156,20 +178,14 @@
         (setf (btreepbf:root-offs pbtree) root-pos
               (btreepbf:root-size pbtree) root-size)
         (let* ((size (pb:octet-size pbtree))
-               (buf (make-array size :element-type '(unsigned-byte 8))))
+               (buf (make-array size :element-type '(unsigned-byte 8)))
+               (len-buf (make-array 4 :element-type '(unsigned-byte 8))))
           (pb:serialize pbtree buf 0 size)
-          (with-open-file (ofs (write-descr-btree-file wd) :direction :output :element-type '(unsigned-byte 8 :if-exists :append))
-            (loop for i from 3 downto 0
-               do (write-byte (logand #xFF (ash size (* -8 i))) ofs))
-            (write-sequence buf ofs)
-            (with-open-file (fs (write-descr-temp-file wd) :direction :input :element-type '(unsigned-byte 8))
-              (let ((btree-size (file-length fs))
-                    (copy-buf (make-array (* 1024 1024) :element-type '(unsigned-byte 8))))
-                (loop for i from 3 downto 0
-                   do (write-byte (logand #xFF (ash btree-size (* -8 i))) ofs))
-                (do ((bytes-read #1=(read-sequence copy-buf fs) #1#))
-                    ((zerop bytes-read) (values))
-                  (write-sequence copy-buf ofs :end bytes-read))))))))))
+          (loop for i from 3 downto 0
+               for j from 0 to 3
+             do (setf (aref len-buf j) (logand #xFF (ash size (* -8 i)))))
+          (with-open-file (fs (write-descr-temp-file wd) :direction :input :element-type '(unsigned-byte 8))
+            (write-blob-raw wd (list len-buf buf fs) "btree")))))))
 
 (defun walk-save-bnodes-tmp (fs node serialize-values-fn)
   (flet ((save-node-to-stream (fs pbnode)

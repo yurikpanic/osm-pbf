@@ -8,11 +8,12 @@ message Bnode {
     required Kind kind = 1 [default = LEAF];
     repeated uint64 keys = 2 [packed = true];
     repeated uint64 pointers = 3 [packed = true];
-    repeated bytes values = 4;
+    repeated uint64 child_sizes = 4 [packed = true];
+    repeated bytes values = 5;
 }
 
 message Btree {
-    repeated Bnode nodes = 2;
+    repeated Bnode nodes = 1;
 }
 
 message BtreePartEntry {

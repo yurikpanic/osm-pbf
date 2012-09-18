@@ -13,18 +13,8 @@ message Bnode {
 }
 
 message Btree {
-    repeated Bnode nodes = 1;
-}
-
-message BtreePartEntry {
-    required uint64 blob_num = 1;
-    required uint64 min_node = 2;
-    required uint64 max_node = 3;
-}
-
-message BtreeIndex {
     optional string type = 1;
     optional string field = 2;
-    required uint32 max_children = 3;
-    repeated BtreePartEntry entries = 4;
+    required uint64 root_offs = 3;
+    required uint64 root_size = 4;
 }

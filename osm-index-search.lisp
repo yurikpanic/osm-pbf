@@ -7,7 +7,8 @@
 (defstruct search-data
   (file-name #p"/home/yuri/work/globus/osm/out.osm.pbf" :type pathname)
   (blob-offsets (make-array 0 :element-type '(unsigned-byte 64) :adjustable t :fill-pointer 0) :type vector)
-  (node-id-btree-idx (make-instance 'btreepbf:btree-index) :type btreepbf:btree-index))
+  (node-id-btree (make-instance 'btreepbf:btree) :type btreepbf:btree)
+  (btree-offset 0 :type integer))
 
 (defun load-blob-and-header (fs &optional pos)
   (when pos
@@ -45,12 +46,13 @@
     (with-open-file (f (search-data-file-name sd) :direction :input :element-type '(unsigned-byte 8))
       (map-blobs #'(lambda (header data header-pos)
                      (vector-push-extend header-pos (search-data-blob-offsets sd))
-                     (when (string= (pb:string-value (osmpbf:type header)) "btree-index")
-                       (let ((btree-idx (make-instance 'btreepbf:btree-index)))
-                         (pb:merge-from-array btree-idx data 0 (length data))
-                         (when (and (string= (pb:string-value (btreepbf:type btree-idx)) "node")
-                                    (string= (pb:string-value (btreepbf:field btree-idx)) "id"))
-                           (setf (search-data-node-id-btree-idx sd) btree-idx)))))
+                     (when (string= (pb:string-value (osmpbf:type header)) "btree")
+                       (let ((btree (make-instance 'btreepbf:btree)))
+                         (pb:merge-from-array btree data 0 (length data))
+                         (when (and (string= (pb:string-value (btreepbf:type btree)) "node")
+                                    (string= (pb:string-value (btreepbf:field btree)) "id"))
+                           (setf (search-data-node-id-btree sd) btree
+                                 (search-data-btree-offset sd) (file-position f))))))
                  f))
     sd))
 

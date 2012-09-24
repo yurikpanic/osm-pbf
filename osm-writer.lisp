@@ -7,6 +7,8 @@
            :end-write
            :write-blob
            :write-node
+           :write-way
+           :write-item
            :write-btree))
 
 (in-package :osm-writer)
@@ -19,6 +21,7 @@
   (stream *standard-output* :type stream)
   (blob-num 0 :type integer)
   (node-idx 0 :type integer)
+  (way-idx 0 :type integer)
   (st-hash (make-hash-table :test 'equal) :type hash-table)
   (st-hash-by-pos (make-hash-table :test 'eq) :type hash-table)
   (st-count 0 :type integer)
@@ -26,7 +29,7 @@
 
 (defun blob-elts-count (wd)
   ;; TODO: add other data types here when they be available
-  (+ (write-descr-node-idx wd)))
+  (+ (write-descr-node-idx wd) (write-descr-way-idx wd)))
 
 (defmacro write-uint32 (val stream)
   (let ((i (gensym)))
@@ -71,6 +74,7 @@
       (setf (write-descr-st-hash wd) (make-hash-table :test 'equal)
             (write-descr-st-hash-by-pos wd) (make-hash-table :test 'eq)
             (write-descr-node-idx wd) 0
+            (write-descr-way-idx wd) 0
             (write-descr-st-count wd) 0
             (write-descr-pgroup wd) (make-instance 'osmpbf:primitive-group))
       wd)))
@@ -109,7 +113,7 @@
     st))
 
 (defun flush-write (wd)
-  (when (or (> (write-descr-st-count wd) 0) (> (write-descr-node-idx wd) 0))
+  (when (or (> (write-descr-st-count wd) 0) (> (blob-elts-count wd) 0))
     (let ((pblock (make-instance 'osmpbf:primitive-block))
           (st (make-string-table wd)))
       (setf (osmpbf:stringtable pblock) st)
@@ -140,14 +144,17 @@
         (setf res (cons (cons key-id val-id) res))))
     (nreverse res)))
 
+(defun copy-tags-to-pb-obj (kv-list pbobj)
+  (dolist (tag-kv kv-list)
+    (vector-push-extend (car tag-kv) (osmpbf:keys pbobj))
+    (vector-push-extend (cdr tag-kv) (osmpbf:vals pbobj))))
+
 (defun make-pbnode (node)
   (let ((pbnode (make-instance 'osmpbf:node)))
     (setf (osmpbf:id pbnode) (node-id node)
           (osmpbf:lat pbnode) (node-lat node)
           (osmpbf:lon pbnode) (node-lon node))
-    (dolist (tag-kv (node-tags-st node))
-      (vector-push-extend (car tag-kv) (osmpbf:keys pbnode))
-      (vector-push-extend (cdr tag-kv) (osmpbf:vals pbnode)))
+    (copy-tags-to-pb-obj (node-tags-st node) pbnode)
     pbnode))
 
 (defun write-node (wd node)
@@ -160,6 +167,33 @@
   (when (>= (blob-elts-count wd) +def-items-per-page+)
     (flush-write wd))
   wd)
+
+(defun make-pbway (way)
+  (let ((pbway (make-instance 'osmpbf:way)))
+    (setf (osmpbf:id pbway) (way-id way))
+    (let ((prev-ref nil))
+      (loop for ref across (way-refs way)
+         do (vector-push-extend (if prev-ref (- ref prev-ref) ref) (osmpbf:refs pbway))
+         do (setf prev-ref ref)))
+    (copy-tags-to-pb-obj (way-tags-st way) pbway)
+    pbway))
+
+(defun write-way (wd way)
+  (setf (way-tags-st way) (update-string-table wd (way-tags way)))
+  (let ((pbway (make-pbway way)))
+    (setf (way-blob-num way) (write-descr-blob-num wd))
+    (incf (write-descr-way-idx wd))
+    (vector-push-extend pbway
+                        (osmpbf:ways (write-descr-pgroup wd))))
+  (when (>= (blob-elts-count wd) +def-items-per-page+)
+    (flush-write wd))
+  wd)
+
+(defgeneric write-item (wd item)
+  (:method (wd (item way))
+    (write-way wd item))
+  (:method (wd (item node))
+    (write-way wd item)))
 
 (defun write-btree (wd tree serialize-values-fn &optional type-str field-str)
   (flush-write wd)

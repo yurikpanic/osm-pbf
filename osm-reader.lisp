@@ -61,9 +61,6 @@
                                          (with-open-file (bb (format nil "/home/yuri/work/globus/osm/zerror-~D" i) :element-type '(unsigned-byte 8) :direction :output :if-exists :supersede)
                                            (write-sequence (osmpbf:zlib-data blob) bb)))))))))))))))
 
-;; 1169 - ways
-;; 1303 - relations
-
 (defvar *orig-header* nil)
 
 (defun read-osm-header (data)
@@ -86,8 +83,10 @@
 (defvar *ways-to-dump* (make-hash-table :test 'eq))
 (defvar *nodes-to-dump* (make-hash-table :test 'eq))
 (defvar *nodes-dump-reverse-order* nil)
+(defvar *ways-dump-reverse-order* nil)
 
 (defvar *nodes-btree* (make-empty-btree 20))
+(defvar *ways-btree* (make-empty-btree 20))
 
 (defun find-tag (tags key)
   (dolist (tag tags)
@@ -164,8 +163,7 @@
                         (setf (aref (way-refs new-way) j) new-ref
                               prev-ref new-ref)))
               (when (gethash (way-id new-way) *ways-to-dump*)
-                ;; TODO: dump this way here
-                )
+                (binsert *ways-btree* (way-id new-way) new-way))
               (setf (aref new-ways i) new-way)))
     new-ways))
 
@@ -191,6 +189,8 @@
                 (loop for member across (relation-members new-rel)
                    do (progn
                         (when (= (rel-member-type member) 1)
+                          (unless (gethash (rel-member-id member) *ways-to-dump*)
+                            (setf *ways-dump-reverse-order* (cons (rel-member-id member) *ways-dump-reverse-order*)))
                           (setf (gethash (rel-member-id member) *ways-to-dump*) t))
                         (when (= (rel-member-type member) 0)
                           (unless (gethash (rel-member-id member) *nodes-to-dump*)
@@ -254,32 +254,54 @@
 (defvar *nodes-to-save* nil
   "A list of node IDs which are already serialized to PrimitiveBlock, but not yet saved to Blob.
 Used to adjust the offset of particular node data in blob.")
+(defvar *ways-to-save* nil)
+
+(defmacro update-pb-offsets (type index)
+  (let* ((in-mem (gensym))
+         (type (string-upcase (if (typep type 'symbol) (symbol-name type) type)))
+         (save-list (intern (format nil "*~AS-TO-SAVE*" type))))
+    `(let ((,in-mem (bsearch ,(intern (format nil "*~AS-BTREE*" type)) (osmpbf:id self))))
+       (when ,in-mem
+         (setf (,(intern (format nil "~A-OFFS-IN-BLOB" type)) ,in-mem) ,index
+               (,(intern (format nil "~A-PB-SIZE" type)) ,in-mem) (pb:octet-size self)
+               ,save-list (cons (osmpbf:id self) ,save-list))))))
 
 ;;; compute the offset of particular node in buffer (offset from begining of PrimitiveBlock)
 (defmethod pb:serialize :before ((self osmpbf:node) buffer index limit)
-  (let ((in-mem-node (bsearch *nodes-btree* (osmpbf:id self))))
-    (when in-mem-node
-      (setf (node-offs-in-blob in-mem-node) index
-            (node-pb-size in-mem-node) (pb:octet-size self)
-            *nodes-to-save* (cons (osmpbf:id self) *nodes-to-save*)))))
+  (update-pb-offsets :node index))
+
+(defmethod pb:serialize :before ((self osmpbf:way) buffer index limit)
+  (update-pb-offsets :way index))
 
 ;;; Adjust the offset of each node serialized to PrimitiveBlock to be the offset from beginning of Blob
 ;;; Code here is somewhat error prone, it will break if we'll have extra data except raw in Blob (like raw_size or zlib_data).
 ;;; But this is sufficient for current case, without modifying the guts of protobuf library.
 (defmethod pb:serialize :before ((self osmpbf:blob) buffer index limit)
   (let ((offs-delta (- (pb:octet-size self) (length (osmpbf:raw self)))))
-    (dolist (node-id *nodes-to-save*)
-      (let ((node (bsearch *nodes-btree* node-id)))
-        (when node
-          (incf (node-offs-in-blob node) offs-delta)))))
-  (setf *nodes-to-save* nil))
+    (macrolet ((update-items-list (list btree offs-field)
+                 (let ((id (gensym))
+                       (item (gensym)))
+                   `(dolist (,id ,list)
+                      (let ((,item (bsearch ,btree ,id)))
+                        (when ,item
+                          (incf (,offs-field ,item) offs-delta)))))))
+      (update-items-list *nodes-to-save* *nodes-btree* node-offs-in-blob)
+      (update-items-list *ways-to-save* *ways-btree* way-offs-in-blob)))
+  (setf *nodes-to-save* nil
+        *ways-to-save* nil))
 
 (defun save-collected-data ()
   (let ((w (begin-write :bbox (osmpbf:bbox *orig-header*))))
-    (dolist (node-id (reverse *nodes-dump-reverse-order*))
-      (let ((node (bsearch *nodes-btree* node-id)))
-        (when node
-          (write-node w node))))
+    (macrolet ((loop-through-items (rev-list btree)
+                  (let ((id (gensym))
+                        (item (gensym)))
+                    `(dolist (,id (reverse ,rev-list))
+                       (let ((,item (bsearch ,btree ,id)))
+                         (when ,item
+                           (write-item w ,item)))))))
+      (loop-through-items *nodes-dump-reverse-order* *nodes-btree*)
+      (loop-through-items *ways-dump-reverse-order* *ways-btree*))
     (flush-write w)
-    (write-btree w *nodes-btree* #'make-node-index-arr "node" "id")
+    (write-btree w *nodes-btree* #'make-index-arr "node" "id")
+    (write-btree w *ways-btree* #'make-index-arr "way" "id")
     (end-write w)))

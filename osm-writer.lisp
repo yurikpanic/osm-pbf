@@ -193,7 +193,7 @@
   (:method (wd (item way))
     (write-way wd item))
   (:method (wd (item node))
-    (write-way wd item)))
+    (write-node wd item)))
 
 (defun write-btree (wd tree serialize-values-fn &optional type-str field-str)
   (flush-write wd)

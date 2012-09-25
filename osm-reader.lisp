@@ -84,9 +84,11 @@
 (defvar *nodes-to-dump* (make-hash-table :test 'eq))
 (defvar *nodes-dump-reverse-order* nil)
 (defvar *ways-dump-reverse-order* nil)
+(defvar *relations-dump-reverse-order* nil)
 
 (defvar *nodes-btree* (make-empty-btree 20))
 (defvar *ways-btree* (make-empty-btree 20))
+(defvar *relations-btree* (make-empty-btree 20))
 
 (defun find-tag (tags key)
   (dolist (tag tags)
@@ -197,10 +199,8 @@
                             ;; add node to list only if it is not yet in hash - some nodes belong to many relations
                             (setf *nodes-dump-reverse-order* (cons (rel-member-id member) *nodes-dump-reverse-order*)))
                           (setf (gethash (rel-member-id member) *nodes-to-dump*) t))))
-                ;; TODO: dump relation here
-                ;; (let ((*print-pretty* nil))
-                ;;   (format t "~A~%" (relation-tags new-rel)))
-                )))
+                (binsert *relations-btree* (relation-id new-rel) new-rel)
+                (setf *relations-dump-reverse-order* (cons (relation-id new-rel) *relations-dump-reverse-order*)))))
     new-rels))
 
 (defvar *last-dense* nil)
@@ -300,8 +300,10 @@ Used to adjust the offset of particular node data in blob.")
                          (when ,item
                            (write-item w ,item)))))))
       (loop-through-items *nodes-dump-reverse-order* *nodes-btree*)
-      (loop-through-items *ways-dump-reverse-order* *ways-btree*))
+      (loop-through-items *ways-dump-reverse-order* *ways-btree*)
+      (loop-through-items *relations-dump-reverse-order* *relations-btree*))
     (flush-write w)
     (write-btree w *nodes-btree* #'make-index-arr "node" "id")
     (write-btree w *ways-btree* #'make-index-arr "way" "id")
+    (write-btree w *relations-btree* #'make-index-arr "realtion" "id")
     (end-write w)))

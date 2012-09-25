@@ -15,7 +15,9 @@
            :rel-member-id :rel-member-role :rel-member-type
 
            :relation :make-relation
-           :relation-id :relation-tags :relation-members)) 
+           :relation-id :relation-tags :relation-tags-st
+           :relation-members
+           :relation-blob-num :relation-offs-in-blob :relation-pb-size))
 
 (in-package :in-mem-str)
 
@@ -72,4 +74,8 @@
 (defstruct relation
   (id 0 :type (unsigned-byte 64))
   (tags nil :type list)
-  (members (make-array 0 :element-type 'rel-member :initial-element (make-rel-member)) :type (simple-array rel-member (*))))
+  (tags-st nil :type list)
+  (members (make-array 0 :element-type 'rel-member :initial-element (make-rel-member)) :type (simple-array rel-member (*)))
+  (blob-num 0 :type integer)
+  (offs-in-blob 0 :type (unsigned-byte 64))
+  (pb-size 0 :type (unsigned-byte 64)))

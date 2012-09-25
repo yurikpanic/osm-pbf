@@ -22,6 +22,7 @@
   (blob-num 0 :type integer)
   (node-idx 0 :type integer)
   (way-idx 0 :type integer)
+  (relation-idx 0 :type integer)
   (st-hash (make-hash-table :test 'equal) :type hash-table)
   (st-hash-by-pos (make-hash-table :test 'eq) :type hash-table)
   (st-count 0 :type integer)
@@ -29,7 +30,7 @@
 
 (defun blob-elts-count (wd)
   ;; TODO: add other data types here when they be available
-  (+ (write-descr-node-idx wd) (write-descr-way-idx wd)))
+  (+ (write-descr-node-idx wd) (write-descr-way-idx wd) (write-descr-relation-idx wd)))
 
 (defmacro write-uint32 (val stream)
   (let ((i (gensym)))
@@ -157,16 +158,24 @@
     (copy-tags-to-pb-obj (node-tags-st node) pbnode)
     pbnode))
 
-(defun write-node (wd node)
-  (setf (node-tags-st node) (update-string-table wd (node-tags node)))
-  (let ((pbnode (make-pbnode node)))
-    (setf (node-blob-num node) (write-descr-blob-num wd))
-    (incf (write-descr-node-idx wd))
-    (vector-push-extend pbnode
-                        (osmpbf:nodes (write-descr-pgroup wd))))
-  (when (>= (blob-elts-count wd) +def-items-per-page+)
-    (flush-write wd))
-  wd)
+(defmacro make-write-item-fn (kind &optional pbgen-fn)
+  (let ((kind (string-upcase (if (typep kind 'symbol) (symbol-name kind) kind)))
+        (item (gensym))
+        (wd (gensym))
+        (pbitem (gensym))
+        (pbgen-fn (or pbgen-fn (intern (format nil "MAKE-PB~A" kind)))))
+    `(defun ,(intern (format nil "WRITE-~A" kind)) (,wd ,item)
+       (setf (,(intern (format nil "~A-TAGS-ST" kind)) ,item) (update-string-table ,wd (,(intern (format nil "~A-TAGS" kind)) ,item)))
+       (let ((,pbitem (,pbgen-fn ,item)))
+         (setf (,(intern (format nil "~A-BLOB-NUM" kind)) ,item) (write-descr-blob-num ,wd))
+         (incf (,(intern (format nil "WRITE-DESCR-~A-IDX" kind)) ,wd))
+         (vector-push-extend ,pbitem
+                             (,(intern (format nil "~AS" kind) 'osmpbf) (write-descr-pgroup ,wd))))
+       (when (>= (blob-elts-count ,wd) +def-items-per-page+)
+         (flush-write ,wd))
+       ,wd)))
+
+(make-write-item-fn :node)
 
 (defun make-pbway (way)
   (let ((pbway (make-instance 'osmpbf:way)))
@@ -178,22 +187,21 @@
     (copy-tags-to-pb-obj (way-tags-st way) pbway)
     pbway))
 
-(defun write-way (wd way)
-  (setf (way-tags-st way) (update-string-table wd (way-tags way)))
-  (let ((pbway (make-pbway way)))
-    (setf (way-blob-num way) (write-descr-blob-num wd))
-    (incf (write-descr-way-idx wd))
-    (vector-push-extend pbway
-                        (osmpbf:ways (write-descr-pgroup wd))))
-  (when (>= (blob-elts-count wd) +def-items-per-page+)
-    (flush-write wd))
-  wd)
+(make-write-item-fn :way)
+
+(defun make-pbrelation (rel)
+  (let ((pbrel (make-instance 'osmpbf:relation)))
+    pbrel))
+
+(make-write-item-fn :relation)
 
 (defgeneric write-item (wd item)
   (:method (wd (item way))
     (write-way wd item))
   (:method (wd (item node))
-    (write-node wd item)))
+    (write-node wd item))
+  (:method (wd (item relation))
+    (write-relation wd item)))
 
 (defun write-btree (wd tree serialize-values-fn &optional type-str field-str)
   (flush-write wd)

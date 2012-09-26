@@ -68,14 +68,15 @@
                          (read-sequence buf fs)
                          (let ((pbtree (make-instance 'btreepbf:btree)))
                            (pb:merge-from-array pbtree buf 0 btree-header-len)
-                           (when (and (string= (pb:string-value (btreepbf:type pbtree)) "way")
-                                      (string= (pb:string-value (btreepbf:field pbtree)) "id"))
-                             (setf (gethash :way-id (search-data-btrees sd)) pbtree
-                                   (gethash :way-id (search-data-btree-offsets sd)) (file-position fs)))
-                           (when (and (string= (pb:string-value (btreepbf:type pbtree)) "node")
-                                      (string= (pb:string-value (btreepbf:field pbtree)) "id"))
-                             (setf (gethash :node-id (search-data-btrees sd)) pbtree
-                                   (gethash :node-id (search-data-btree-offsets sd)) (file-position fs)))))))
+                           (macrolet ((detect-index (type field)
+                                        (let ((tf (intern (format nil "~A-~A" (string-upcase type) (string-upcase field)) :keyword)))
+                                          `(when (and (string= (pb:string-value (btreepbf:type pbtree)) ,type)
+                                                      (string= (pb:string-value (btreepbf:field pbtree)) ,field))
+                                             (setf (gethash ,tf (search-data-btrees sd)) pbtree
+                                                   (gethash ,tf (search-data-btree-offsets sd)) (file-position fs))))))
+                             (detect-index "way" "id")
+                             (detect-index "node" "id")
+                             (detect-index "relation" "id"))))))
                  fs))
     sd))
 
@@ -156,6 +157,15 @@
      (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
      0 (btreepbf:size blob-idx))
     way))
+
+(defun find-relation-by-id (sd id)
+  (let ((blob-idx (find-by-id sd id :relation-id))
+        (rel (make-instance 'osmpbf:relation)))
+    (pb:merge-from-array
+     rel
+     (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
+     0 (btreepbf:size blob-idx))
+    rel))
 
 ;; e.g. (find-node-by-id *sd* 337732605)
 ;;      (find-node-by-id *sd* 337526439)

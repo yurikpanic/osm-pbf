@@ -17,7 +17,8 @@
            :relation :make-relation
            :relation-id :relation-tags :relation-tags-st
            :relation-members
-           :relation-blob-num :relation-offs-in-blob :relation-pb-size))
+           :relation-blob-num :relation-offs-in-blob :relation-pb-size
+           :relation-mem-roles-st))
 
 (in-package :in-mem-str)
 
@@ -60,11 +61,16 @@
 (defun make-way-index-arr (way)
   (make-index-arr-any way :way))
 
+(defun make-relation-index-arr (relation)
+  (make-index-arr-any relation :relation))
+
 (defgeneric make-index-arr (item)
   (:method ((item node))
     (make-node-index-arr item))
   (:method ((item way))
-    (make-way-index-arr item)))
+    (make-way-index-arr item))
+  (:method ((item relation))
+    (make-relation-index-arr item)))
 
 (defstruct rel-member
   (id 0 :type (unsigned-byte 64))
@@ -76,6 +82,7 @@
   (tags nil :type list)
   (tags-st nil :type list)
   (members (make-array 0 :element-type 'rel-member :initial-element (make-rel-member)) :type (simple-array rel-member (*)))
+  (mem-roles-st nil :type list)
   (blob-num 0 :type integer)
   (offs-in-blob 0 :type (unsigned-byte 64))
   (pb-size 0 :type (unsigned-byte 64)))

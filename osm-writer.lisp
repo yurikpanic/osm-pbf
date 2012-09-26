@@ -6,8 +6,6 @@
            :flush-write
            :end-write
            :write-blob
-           :write-node
-           :write-way
            :write-item
            :write-btree))
 
@@ -158,13 +156,14 @@
     (copy-tags-to-pb-obj (node-tags-st node) pbnode)
     pbnode))
 
-(defmacro make-write-item-fn (kind &optional pbgen-fn)
+(defmacro make-write-item-fn (kind &key pbgen-fn do-before-fn)
   (let ((kind (string-upcase (if (typep kind 'symbol) (symbol-name kind) kind)))
         (item (gensym))
         (wd (gensym))
         (pbitem (gensym))
         (pbgen-fn (or pbgen-fn (intern (format nil "MAKE-PB~A" kind)))))
     `(defun ,(intern (format nil "WRITE-~A" kind)) (,wd ,item)
+       ,@(when do-before-fn (list `(funcall ,do-before-fn ,wd ,item)))
        (setf (,(intern (format nil "~A-TAGS-ST" kind)) ,item) (update-string-table ,wd (,(intern (format nil "~A-TAGS" kind)) ,item)))
        (let ((,pbitem (,pbgen-fn ,item)))
          (setf (,(intern (format nil "~A-BLOB-NUM" kind)) ,item) (write-descr-blob-num ,wd))
@@ -191,9 +190,29 @@
 
 (defun make-pbrelation (rel)
   (let ((pbrel (make-instance 'osmpbf:relation)))
+    (setf (osmpbf:id pbrel) (relation-id rel))
+    (let ((prev-mem-id))
+      (loop for mem across (relation-members rel)
+           for mrs in (relation-mem-roles-st rel)
+           do (vector-push-extend (if prev-mem-id
+                                      (- (rel-member-id mem) prev-mem-id)
+                                      (rel-member-id mem))
+                                  (osmpbf:memids pbrel))
+           do (vector-push-extend (rel-member-type mem) (osmpbf:types pbrel))
+           do (vector-push-extend mrs (osmpbf:roles-sid pbrel))
+           do (setf prev-mem-id (rel-member-id mem))))
+    (copy-tags-to-pb-obj (relation-tags-st rel) pbrel)
     pbrel))
 
-(make-write-item-fn :relation)
+(defun update-string-table-by-roles-sid (wd rel)
+  (let ((res nil))
+    (loop for mem across (relation-members rel)
+       do (push (st-entry wd (rel-member-role mem)) res))
+    (setf (relation-mem-roles-st rel) (nreverse res))))
+
+(make-write-item-fn
+ :relation
+ :do-before-fn #'update-string-table-by-roles-sid)
 
 (defgeneric write-item (wd item)
   (:method (wd (item way))

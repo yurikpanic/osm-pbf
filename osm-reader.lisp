@@ -255,6 +255,7 @@
   "A list of node IDs which are already serialized to PrimitiveBlock, but not yet saved to Blob.
 Used to adjust the offset of particular node data in blob.")
 (defvar *ways-to-save* nil)
+(defvar *relations-to-save* nil)
 
 (defmacro update-pb-offsets (type index)
   (let* ((in-mem (gensym))
@@ -273,6 +274,9 @@ Used to adjust the offset of particular node data in blob.")
 (defmethod pb:serialize :before ((self osmpbf:way) buffer index limit)
   (update-pb-offsets :way index))
 
+(defmethod pb:serialize :before ((self osmpbf:relation) buffer index limit)
+  (update-pb-offsets :relation index))
+
 ;;; Adjust the offset of each node serialized to PrimitiveBlock to be the offset from beginning of Blob
 ;;; Code here is somewhat error prone, it will break if we'll have extra data except raw in Blob (like raw_size or zlib_data).
 ;;; But this is sufficient for current case, without modifying the guts of protobuf library.
@@ -286,7 +290,8 @@ Used to adjust the offset of particular node data in blob.")
                         (when ,item
                           (incf (,offs-field ,item) offs-delta)))))))
       (update-items-list *nodes-to-save* *nodes-btree* node-offs-in-blob)
-      (update-items-list *ways-to-save* *ways-btree* way-offs-in-blob)))
+      (update-items-list *ways-to-save* *ways-btree* way-offs-in-blob)
+      (update-items-list *relations-to-save* *relations-btree* relation-offs-in-blob)))
   (setf *nodes-to-save* nil
         *ways-to-save* nil))
 
@@ -305,5 +310,5 @@ Used to adjust the offset of particular node data in blob.")
     (flush-write w)
     (write-btree w *nodes-btree* #'make-index-arr "node" "id")
     (write-btree w *ways-btree* #'make-index-arr "way" "id")
-    (write-btree w *relations-btree* #'make-index-arr "realtion" "id")
+    (write-btree w *relations-btree* #'make-index-arr "relation" "id")
     (end-write w)))

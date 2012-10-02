@@ -293,7 +293,19 @@ Used to adjust the offset of particular node data in blob.")
       (update-items-list *ways-to-save* *ways-btree* way-offs-in-blob)
       (update-items-list *relations-to-save* *relations-btree* relation-offs-in-blob)))
   (setf *nodes-to-save* nil
-        *ways-to-save* nil))
+        *ways-to-save* nil
+        *relations-to-save* nil))
+
+(defun clear-collected-data ()
+  (clrhash *nodes-to-dump*)
+  (clrhash *ways-to-dump*)
+  (setf *nodes-dump-reverse-order* nil
+        *ways-dump-reverse-order* nil
+        *relations-dump-reverse-order* nil
+        *nodes-btree* (make-empty-btree)
+        *ways-btree* (make-empty-btree)
+        *relations-btree* (make-empty-btree))
+  (values))
 
 (defun save-collected-data ()
   (let ((w (begin-write :bbox (osmpbf:bbox *orig-header*))))

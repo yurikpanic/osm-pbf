@@ -41,6 +41,21 @@
   (offs-in-blob 0 :type (unsigned-byte 64))
   (pb-size 0 :type (unsigned-byte 64)))
 
+(defstruct rel-member
+  (id 0 :type (unsigned-byte 64))
+  (role "" :type string)
+  (type 0 :type (unsigned-byte 8)))
+
+(defstruct relation
+  (id 0 :type (unsigned-byte 64))
+  (tags nil :type list)
+  (tags-st nil :type list)
+  (members (make-array 0 :element-type 'rel-member :initial-element (make-rel-member)) :type (simple-array rel-member (*)))
+  (mem-roles-st nil :type list)
+  (blob-num 0 :type integer)
+  (offs-in-blob 0 :type (unsigned-byte 64))
+  (pb-size 0 :type (unsigned-byte 64)))
+
 (defmacro make-index-arr-any (val type)
   (let ((blob-index (gensym))
         (size (gensym))
@@ -72,17 +87,4 @@
   (:method ((item relation))
     (make-relation-index-arr item)))
 
-(defstruct rel-member
-  (id 0 :type (unsigned-byte 64))
-  (role "" :type string)
-  (type 0 :type (unsigned-byte 8)))
 
-(defstruct relation
-  (id 0 :type (unsigned-byte 64))
-  (tags nil :type list)
-  (tags-st nil :type list)
-  (members (make-array 0 :element-type 'rel-member :initial-element (make-rel-member)) :type (simple-array rel-member (*)))
-  (mem-roles-st nil :type list)
-  (blob-num 0 :type integer)
-  (offs-in-blob 0 :type (unsigned-byte 64))
-  (pb-size 0 :type (unsigned-byte 64)))

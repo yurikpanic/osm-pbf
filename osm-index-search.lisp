@@ -140,6 +140,13 @@
         (pb:merge-from-array blob-idx val 0 (length val))
         blob-idx))))
 
+(defmacro item-deserializer (sd blob-idx kind)
+  (let ((kind (string-upcase (if (typep kind 'symbol) (symbol-name kind) kind)))
+        (item (gensym)))
+    `(let ((,item (make-instance ',(intern kind :osmpbf))))
+       (pb:merge-from-array ,item (load-direct ,sd (btreepbf:blob-num ,blob-idx) (btreepbf:blob-offs ,blob-idx) (btreepbf:size ,blob-idx)) 0 (btreepbf:size ,blob-idx))
+       ,item)))
+
 (defun find-node-by-id (sd id)
   (let ((blob-idx (find-by-id sd id :node-id))
         (node (make-instance 'osmpbf:node)))
@@ -167,5 +174,24 @@
      0 (btreepbf:size blob-idx))
     rel))
 
-;; e.g. (find-node-by-id *sd* 337732605)
-;;      (find-node-by-id *sd* 337526439)
+(defun traverse-btree (sd bnode btree-id fun)
+  (if (= (btreepbf:kind bnode) btreepbf:+bnode-kind-node+)
+      (loop for pnt across (btreepbf:pointers bnode)
+           for cs across (btreepbf:child-sizes bnode)
+           do (traverse-btree sd (get-btree-node sd pnt cs btree-id) btree-id fun))
+      (loop for key across (btreepbf:keys bnode)
+         for val across (btreepbf:values bnode)
+         do (when val
+              (let ((blob-idx (make-instance 'btreepbf:blob-index)))
+                (pb:merge-from-array blob-idx val 0 (length val))
+                (funcall fun blob-idx))))))
+
+(defun for-every (sd btree-id fun)
+  (let* ((btree (gethash btree-id (search-data-btrees sd)))
+         (root (get-btree-node sd (btreepbf:root-offs btree) (btreepbf:root-size btree) btree-id)))
+    (traverse-btree sd root btree-id fun)))
+
+;; iterate over relations
+;; (for-every *sd* :relation-id 
+;;            #'(lambda (x)
+;;                (format nil "~A~%" (item-deserializer *sd* x :relation))))

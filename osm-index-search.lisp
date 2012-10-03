@@ -150,29 +150,32 @@
 (defun find-node-by-id (sd id)
   (let ((blob-idx (find-by-id sd id :node-id))
         (node (make-instance 'osmpbf:node)))
-    (pb:merge-from-array
-     node
-     (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
-     0 (btreepbf:size blob-idx))
-    node))
+    (when blob-idx
+      (pb:merge-from-array
+       node
+       (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
+       0 (btreepbf:size blob-idx))
+      node)))
 
 (defun find-way-by-id (sd id)
   (let ((blob-idx (find-by-id sd id :way-id))
         (way (make-instance 'osmpbf:way)))
-    (pb:merge-from-array
-     way
-     (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
-     0 (btreepbf:size blob-idx))
-    way))
+    (when blob-idx
+      (pb:merge-from-array
+       way
+       (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
+       0 (btreepbf:size blob-idx))
+      way)))
 
 (defun find-relation-by-id (sd id)
   (let ((blob-idx (find-by-id sd id :relation-id))
         (rel (make-instance 'osmpbf:relation)))
-    (pb:merge-from-array
-     rel
-     (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
-     0 (btreepbf:size blob-idx))
-    rel))
+    (when blob-idx
+      (pb:merge-from-array
+       rel
+       (load-direct sd (btreepbf:blob-num blob-idx) (btreepbf:blob-offs blob-idx) (btreepbf:size blob-idx))
+       0 (btreepbf:size blob-idx))
+      (values rel blob-idx))))
 
 (defun traverse-btree (sd bnode btree-id fun)
   (if (= (btreepbf:kind bnode) btreepbf:+bnode-kind-node+)
@@ -195,3 +198,76 @@
 ;; (for-every *sd* :relation-id 
 ;;            #'(lambda (x)
 ;;                (format nil "~A~%" (item-deserializer *sd* x :relation))))
+
+(defun load-nodes-for-way (sd way)
+  (let ((prev-id 0))
+    (loop for ref across (osmpbf:refs way)
+         collect (find-node-by-id sd (setf prev-id (+ prev-id ref))))))
+
+(defun load-ways-for-relation (sd relation)
+  (let ((prev-id 0))
+    (loop for mem across (osmpbf:memids relation)
+       for type across (osmpbf:types relation)
+       when (eq type osmpbf:+relation-member-type-way+)
+       collect (find-way-by-id sd (+ mem prev-id))
+       do (setf prev-id (+ mem prev-id)))))
+  
+(defun check-right-ray-cross (lon lat lon1 lat1 lon2 lat2)
+  (let ((lat-sign1 (signum (- lat lat1)))
+        (lat-sign2 (signum (- lat lat2))))
+    (when (and (zerop lat-sign1) (zerop lat-sign2))
+      (return-from check-right-ray-cross 1))
+    (when (or (and (= lat-sign1 lat-sign2))
+              (and (< lon1 lon) (< lon2 lon)))
+      (return-from check-right-ray-cross 0))
+    (let ((x (+ lon1 (/ (* (- lon2 lon1) (- lat lat1)) (- lat2 lat1)))))
+      (if (< lon1 x lon2) 1 0))))
+
+(defun count-right-ray-cross (sd relation lon lat)
+  (let ((prev-node nil)
+        (first-node nil)
+        (cnt 0))
+    (loop for way in (load-ways-for-relation sd relation)
+       do (if way
+              (dolist (node (load-nodes-for-way sd way))
+                (when prev-node
+                  (incf cnt
+                        (check-right-ray-cross lon lat
+                                               (osmpbf:lon prev-node) (osmpbf:lat prev-node)
+                                               (osmpbf:lon node) (osmpbf:lat node))))
+                (unless first-node
+                  (setf first-node node))
+                (setf prev-node node))
+              ;; some ways are missing for this relation - dont check it
+              (return-from count-right-ray-cross 0)))
+    (when first-node
+      (incf cnt
+            (check-right-ray-cross lon lat
+                                   (osmpbf:lon prev-node) (osmpbf:lat prev-node)
+                                   (osmpbf:lon first-node) (osmpbf:lat first-node))))
+    cnt))
+
+(defparameter *lat* 478426580)
+(defparameter *lon* 350764960)
+
+(defun count-test ()
+  (for-every *sd* :relation-id 
+             #'(lambda (x)
+                 (let* ((rel (item-deserializer *sd* x :relation))
+                        (cnt (count-right-ray-cross *sd* rel *lon* *lat*)))
+                   (unless (zerop cnt)
+                     (format t "~A ~A~%" (osmpbf:id rel) cnt))))))
+
+;; relations and cross counts
+;; 71980 2
+;; 101746 3
+;; 1738023 3
+;; 1738024 3
+;; 1738035 2
+;; 1738038 3
+;; 1738042 2
+;; 1742286 3
+;; 1742287 3
+;; 1742305 3
+;; 1742310 2
+

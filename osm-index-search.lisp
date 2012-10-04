@@ -131,6 +131,41 @@
             (read-sequence node-buf fs)
             node-buf))))))
 
+(defun load-stringtable-entries (sd blob-num entries)
+  (when (typep entries '(unsigned-byte 64))
+    (setf entries (list entries)))
+  (let ((stringtable (load-stringtable sd blob-num)))
+    (when stringtable
+      (if (typep entries 'list)
+          (loop for entry in entries
+             collect (sb-ext:octets-to-string (aref stringtable entry)))
+          (loop for entry across entries
+             collect (sb-ext:octets-to-string (aref stringtable entry)))))))
+
+(defun load-stringtable (sd blob-num)
+  (with-open-file (fs (search-data-file-name sd) :element-type '(unsigned-byte 8))
+    (file-position fs (aref (search-data-blob-offsets sd) blob-num))
+    (let ((blob-header-len-buf (make-array 4 :element-type '(unsigned-byte 8))))
+      (read-sequence blob-header-len-buf fs)
+      (let ((blob-header-len 0))
+        (loop for d across blob-header-len-buf
+           do (setf blob-header-len (logior (ash blob-header-len 8) d)))
+        (let ((blob-header-buf (make-array blob-header-len :element-type '(unsigned-byte 8))))
+          (read-sequence blob-header-buf fs)
+          (let ((blob-header (make-instance 'osmpbf:blob-header)))
+            (pb:merge-from-array blob-header blob-header-buf 0 blob-header-len)
+            (when (string= (pb:string-value (osmpbf:type blob-header)) "OSMData")
+              (let ((blob-buf (make-array (osmpbf:datasize blob-header) :element-type '(unsigned-byte 8))))
+                (read-sequence blob-buf fs)
+                (let ((blob (make-instance 'osmpbf:blob)))
+                  (pb:merge-from-array blob blob-buf 0 (length blob-buf))
+                  (let ((data (if (osmpbf:has-raw blob)
+                                  (osmpbf:raw blob)
+                                  (coerce (zlib:uncompress (osmpbf:zlib-data blob) :uncompressed-size (osmpbf:raw-size blob)) '(simple-array (unsigned-byte 8) (*))))))
+                    (let ((pblock (make-instance 'osmpbf:primitive-block)))
+                      (pb:merge-from-array pblock data 0 (length data))
+                      (osmpbf:s (osmpbf:stringtable pblock)))))))))))))
+
 (defun find-by-id (sd id btree-id)
   (let* ((btree (gethash btree-id (search-data-btrees sd)))
          (root (get-btree-node sd (btreepbf:root-offs btree) (btreepbf:root-size btree) btree-id))

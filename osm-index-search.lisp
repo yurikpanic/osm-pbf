@@ -251,35 +251,35 @@
   (let ((lat-sign1 (signum (- lat lat1)))
         (lat-sign2 (signum (- lat lat2))))
     (when (and (zerop lat-sign1) (zerop lat-sign2))
-      (return-from check-right-ray-cross 1))
+      (return-from check-right-ray-cross (values t t t)))
     (when (or (and (= lat-sign1 lat-sign2))
               (and (< lon1 lon) (< lon2 lon)))
-      (return-from check-right-ray-cross 0))
+      (return-from check-right-ray-cross nil))
     (let ((x (+ lon1 (/ (* (- lon2 lon1) (- lat lat1)) (- lat2 lat1)))))
-      (if (< lon1 x lon2) 1 0))))
+      (if (or (< lon1 x lon2) (< lon2 x lon1)) t
+          (cond
+            ((= lon1 x) (values t t nil))
+            ((= x lon2) (values t nil t))
+            (t nil))))))
 
 (defun count-right-ray-cross (sd relation lon lat)
-  (let ((prev-node nil)
-        (first-node nil)
-        (cnt 0))
+  (let ((cnt 0))
     (loop for way in (load-ways-for-relation sd relation)
        do (if way
-              (dolist (node (load-nodes-for-way sd way))
-                (when prev-node
-                  (incf cnt
+              (let ((prev-node nil))
+                (dolist (node (load-nodes-for-way sd way))
+                  (when prev-node
+                    (multiple-value-bind
+                          (cross in-p1 in-p2)
                         (check-right-ray-cross lon lat
                                                (osmpbf:lon prev-node) (osmpbf:lat prev-node)
-                                               (osmpbf:lon node) (osmpbf:lat node))))
-                (unless first-node
-                  (setf first-node node))
-                (setf prev-node node))
+                                               (osmpbf:lon node) (osmpbf:lat node))
+                      (when (or in-p1 in-p2)
+                        (format t "~A: [~A ~A] [~A ~A] ~A ~A ~A~%" (osmpbf:id node) (osmpbf:lon node) (osmpbf:lat node) (osmpbf:lon prev-node) (osmpbf:lat prev-node) cross in-p1 in-p2))
+                      (when cross (incf cnt))))
+                  (setf prev-node node)))
               ;; some ways are missing for this relation - dont check it
               (return-from count-right-ray-cross 0)))
-    (when first-node
-      (incf cnt
-            (check-right-ray-cross lon lat
-                                   (osmpbf:lon prev-node) (osmpbf:lat prev-node)
-                                   (osmpbf:lon first-node) (osmpbf:lat first-node))))
     cnt))
 
 (defparameter *lat* 478426580)

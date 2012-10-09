@@ -263,7 +263,8 @@
             (t nil))))))
 
 (defun count-right-ray-cross (sd relation lon lat)
-  (let ((cnt 0))
+  (let ((cnt 0)
+        (point-crossed (make-hash-table)))
     (loop for way in (load-ways-for-relation sd relation)
        do (if way
               (let ((prev-node nil))
@@ -274,9 +275,14 @@
                         (check-right-ray-cross lon lat
                                                (osmpbf:lon prev-node) (osmpbf:lat prev-node)
                                                (osmpbf:lon node) (osmpbf:lat node))
-                      (when (or in-p1 in-p2)
-                        (format t "~A: [~A ~A] [~A ~A] ~A ~A ~A~%" (osmpbf:id node) (osmpbf:lon node) (osmpbf:lat node) (osmpbf:lon prev-node) (osmpbf:lat prev-node) cross in-p1 in-p2))
-                      (when cross (incf cnt))))
+                      (when cross
+                        (when (or
+                               (and (not in-p1) (not in-p2))
+                               (and in-p1 (not (gethash (osmpbf:id prev-node) point-crossed)))
+                               (and in-p2 (not (gethash (osmpbf:id node) point-crossed))))
+                          (incf cnt)
+                          (when in-p1 (setf (gethash (osmpbf:id prev-node) point-crossed) t))
+                          (when in-p2 (setf (gethash (osmpbf:id node) point-crossed) t))))))
                   (setf prev-node node)))
               ;; some ways are missing for this relation - dont check it
               (return-from count-right-ray-cross 0)))

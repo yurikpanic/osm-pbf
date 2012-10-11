@@ -296,35 +296,6 @@ Used to adjust the offset of particular node data in blob.")
         *ways-to-save* nil
         *relations-to-save* nil))
 
-(defun clear-collected-data ()
-  (clrhash *nodes-to-dump*)
-  (clrhash *ways-to-dump*)
-  (setf *nodes-dump-reverse-order* nil
-        *ways-dump-reverse-order* nil
-        *relations-dump-reverse-order* nil
-        *nodes-btree* (make-empty-btree)
-        *ways-btree* (make-empty-btree)
-        *relations-btree* (make-empty-btree))
-  (values))
-
-(defun save-collected-data ()
-  (let ((w (begin-write :bbox (osmpbf:bbox *orig-header*))))
-    (macrolet ((loop-through-items (rev-list btree)
-                  (let ((id (gensym))
-                        (item (gensym)))
-                    `(dolist (,id (reverse ,rev-list))
-                       (let ((,item (bsearch ,btree ,id)))
-                         (when ,item
-                           (write-item w ,item)))))))
-      (loop-through-items *nodes-dump-reverse-order* *nodes-btree*)
-      (loop-through-items *ways-dump-reverse-order* *ways-btree*)
-      (loop-through-items *relations-dump-reverse-order* *relations-btree*))
-    (flush-write w)
-    (write-btree w *nodes-btree* #'make-index-arr "node" "id")
-    (write-btree w *ways-btree* #'make-index-arr "way" "id")
-    (write-btree w *relations-btree* #'make-index-arr "relation" "id")
-    (end-write w)))
-
 (defun update-bbox-by-node (bbox node)
   (macrolet ((set-if (op node-field bbox-field)
                `(when (,op (,node-field node) (,bbox-field bbox))
@@ -382,3 +353,35 @@ Used to adjust the offset of particular node data in blob.")
                 (when bbox (binsert *relation-bboxes-btree* rel-id bbox))))))
   (btree-size *relation-bboxes-btree*))
 
+(defun clear-collected-data ()
+  (clrhash *nodes-to-dump*)
+  (clrhash *ways-to-dump*)
+  (setf *nodes-dump-reverse-order* nil
+        *ways-dump-reverse-order* nil
+        *relations-dump-reverse-order* nil
+        *nodes-btree* (make-empty-btree 20)
+        *ways-btree* (make-empty-btree 20)
+        *relations-btree* (make-empty-btree 20)
+        *way-bboxes-btree* (make-empty-btree 20)
+        *relation-bboxes-btree* (make-empty-btree 20))
+  (values))
+
+(defun save-collected-data ()
+  (let ((w (begin-write :bbox (osmpbf:bbox *orig-header*))))
+    (macrolet ((loop-through-items (rev-list btree)
+                  (let ((id (gensym))
+                        (item (gensym)))
+                    `(dolist (,id (reverse ,rev-list))
+                       (let ((,item (bsearch ,btree ,id)))
+                         (when ,item
+                           (write-item w ,item)))))))
+      (loop-through-items *nodes-dump-reverse-order* *nodes-btree*)
+      (loop-through-items *ways-dump-reverse-order* *ways-btree*)
+      (loop-through-items *relations-dump-reverse-order* *relations-btree*))
+    (flush-write w)
+    (write-btree w *nodes-btree* #'make-index-arr "node" "id")
+    (write-btree w *ways-btree* #'make-index-arr "way" "id")
+    (write-btree w *relations-btree* #'make-index-arr "relation" "id")
+    (write-btree w *way-bboxes-btree* #'make-bbox-leaf "way-bbox" "id")
+    (write-btree w *relation-bboxes-btree* #'make-bbox-leaf "relation-bbox" "id")
+    (end-write w)))

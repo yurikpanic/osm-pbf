@@ -1,0 +1,8 @@
+package btreepbf;
+
+message Bbox {
+    required sint64 min_lon = 1;
+    required sint64 min_lat = 2;
+    required sint64 max_lon = 3; // DELTA with min_lon
+    required sint64 max_lat = 4; // DELTA with min_lat
+}

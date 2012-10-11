@@ -76,7 +76,9 @@
                                                    (gethash ,tf (search-data-btree-offsets sd)) (file-position fs))))))
                              (detect-index "way" "id")
                              (detect-index "node" "id")
-                             (detect-index "relation" "id"))))))
+                             (detect-index "relation" "id")
+                             (detect-index "way-bbox" "id")
+                             (detect-index "relation-bbox" "id"))))))
                  fs))
     sd))
 
@@ -166,14 +168,25 @@
                       (pb:merge-from-array pblock data 0 (length data))
                       (osmpbf:s (osmpbf:stringtable pblock)))))))))))))
 
-(defun find-by-id (sd id btree-id)
+(defun find-by-id-raw (sd id btree-id)
   (let* ((btree (gethash btree-id (search-data-btrees sd)))
-         (root (get-btree-node sd (btreepbf:root-offs btree) (btreepbf:root-size btree) btree-id))
-         (val (search-btree sd root id btree-id)))
-    (when val
-      (let ((blob-idx (make-instance 'btreepbf:blob-index)))
-        (pb:merge-from-array blob-idx val 0 (length val))
-        blob-idx))))
+         (root (get-btree-node sd (btreepbf:root-offs btree) (btreepbf:root-size btree) btree-id)))
+    (search-btree sd root id btree-id)))
+
+(defmacro deserialize-value-to-type (type val)
+  (let ((res (gensym)))
+  `(when ,val
+     (let ((,res (make-instance ,type)))
+       (pb:merge-from-array ,res ,val 0 (length ,val))
+       ,res))))
+
+(defun find-by-id-blob-idx (sd id btree-id)
+  (let ((val (find-by-id-raw sd id btree-id)))
+    (deserialize-value-to-type 'btreepbf:blob-index val)))
+
+(defun find-by-id-bbox (sd id btree-id)
+  (let ((val (find-by-id-raw sd id btree-id)))
+    (deserialize-value-to-type 'btreepbf:bbox val)))
 
 (defmacro item-deserializer (sd blob-idx kind)
   (let ((kind (string-upcase (if (typep kind 'symbol) (symbol-name kind) kind)))
@@ -183,7 +196,7 @@
        ,item)))
 
 (defun find-node-by-id (sd id)
-  (let ((blob-idx (find-by-id sd id :node-id))
+  (let ((blob-idx (find-by-id-blob-idx sd id :node-id))
         (node (make-instance 'osmpbf:node)))
     (when blob-idx
       (pb:merge-from-array
@@ -193,7 +206,7 @@
       node)))
 
 (defun find-way-by-id (sd id)
-  (let ((blob-idx (find-by-id sd id :way-id))
+  (let ((blob-idx (find-by-id-blob-idx sd id :way-id))
         (way (make-instance 'osmpbf:way)))
     (when blob-idx
       (pb:merge-from-array
@@ -203,7 +216,7 @@
       way)))
 
 (defun find-relation-by-id (sd id)
-  (let ((blob-idx (find-by-id sd id :relation-id))
+  (let ((blob-idx (find-by-id-blob-idx sd id :relation-id))
         (rel (make-instance 'osmpbf:relation)))
     (when blob-idx
       (pb:merge-from-array

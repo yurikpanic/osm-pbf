@@ -22,7 +22,8 @@
 
            :make-bbox
            :bbox-min-lon :bbox-min-lat
-           :bbox-max-lon :bbox-max-lat))
+           :bbox-max-lon :bbox-max-lat
+           :make-bbox-leaf))
 
 (in-package :in-mem-str)
 
@@ -97,4 +98,14 @@
   (:method ((item relation))
     (make-relation-index-arr item)))
 
-
+(defun make-bbox-leaf (bbox)
+  (declare (type bbox bbox))
+  (let ((pbbox (make-instance 'btreepbf:bbox)))
+    (setf (btreepbf:min-lon pbbox) (bbox-min-lon bbox)
+          (btreepbf:min-lat pbbox) (bbox-min-lat bbox)
+          (btreepbf:max-lon pbbox) (- (bbox-max-lon bbox) (bbox-min-lon bbox))
+          (btreepbf:max-lat pbbox) (- (bbox-max-lat bbox) (bbox-min-lat bbox)))
+    (let* ((size (pb:octet-size pbbox))
+           (buf (make-array size :element-type '(unsigned-byte 8))))
+      (pb:serialize pbbox buf 0 size)
+      buf)))

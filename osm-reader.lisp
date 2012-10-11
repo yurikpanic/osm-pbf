@@ -342,16 +342,15 @@ Used to adjust the offset of particular node data in blob.")
               (when node (update-bbox-by-node bbox node))))
     bbox))
 
-(defparameter *way-bboxes* (make-hash-table :test 'eq))
+(defparameter *way-bboxes-btree* (make-empty-btree 20))
 
 (defun make-ways-bboxes ()
-  (clrhash *way-bboxes*)
   (loop for way-id in *ways-dump-reverse-order*
        do (let ((way (bsearch *ways-btree* way-id)))
             (when way
-              (setf (gethash (way-id way) *way-bboxes*)
-                    (calc-way-bbox way)))))
-  *way-bboxes*)
+              (binsert *way-bboxes-btree* (way-id way)
+                       (calc-way-bbox way)))))
+  (btree-size *way-bboxes-btree*))
 
 (defun add-bboxes (dest-bbox src-bbox)
   (setf (bbox-min-lon dest-bbox) (min (bbox-min-lon dest-bbox) (bbox-min-lon src-bbox))
@@ -364,23 +363,22 @@ Used to adjust the offset of particular node data in blob.")
   (make-bbox :min-lon (bbox-min-lon bbox) :min-lat (bbox-min-lat bbox)
              :max-lon (bbox-max-lon bbox) :max-lat (bbox-max-lat bbox)))
 
-(defparameter *relation-bboxes* (make-hash-table :test 'eq))
+(defparameter *relation-bboxes-btree* (make-empty-btree 20))
 
 (defun make-relation-bboxes ()
-  (clrhash *relation-bboxes*)
   (loop for rel-id in *relations-dump-reverse-order*
        do (let ((rel (bsearch *relations-btree* rel-id)))
             (when rel
               (let ((bbox nil))
                 (loop for mem across (relation-members rel)
                      do (when (eq (rel-member-type mem) 1)
-                          (let ((way-bbox (or (gethash (rel-member-id mem) *way-bboxes*)
+                          (let ((way-bbox (or (bsearch *way-bboxes-btree* (rel-member-id mem))
                                               (let ((way (bsearch *ways-btree* (rel-member-id mem))))
                                                 (when way (calc-way-bbox way))))))
                             (when way-bbox
                               (if bbox
                                   (add-bboxes bbox way-bbox)
                                   (setf bbox (copy-bbox way-bbox)))))))
-                (when bbox (setf (gethash rel-id *relation-bboxes*) bbox))))))
-  *relation-bboxes*)
+                (when bbox (binsert *relation-bboxes-btree* rel-id bbox))))))
+  (btree-size *relation-bboxes-btree*))
 

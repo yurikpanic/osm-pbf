@@ -18,7 +18,11 @@
            :relation-id :relation-tags :relation-tags-st
            :relation-members
            :relation-blob-num :relation-offs-in-blob :relation-pb-size
-           :relation-mem-roles-st))
+           :relation-mem-roles-st
+
+           :make-bbox
+           :bbox-min-lon :bbox-min-lat
+           :bbox-max-lon :bbox-max-lat))
 
 (in-package :in-mem-str)
 
@@ -55,6 +59,12 @@
   (blob-num 0 :type integer)
   (offs-in-blob 0 :type (unsigned-byte 64))
   (pb-size 0 :type (unsigned-byte 64)))
+
+(defstruct bbox
+  (min-lon 3600000000 :type (unsigned-byte 64))
+  (min-lat 3600000000 :type (unsigned-byte 64))
+  (max-lon 0 :type (unsigned-byte 64))
+  (max-lat 0 :type (unsigned-byte 64)))
 
 (defmacro make-index-arr-any (val type)
   (let ((blob-index (gensym))

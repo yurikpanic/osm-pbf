@@ -324,3 +324,63 @@ Used to adjust the offset of particular node data in blob.")
     (write-btree w *ways-btree* #'make-index-arr "way" "id")
     (write-btree w *relations-btree* #'make-index-arr "relation" "id")
     (end-write w)))
+
+(defun update-bbox-by-node (bbox node)
+  (macrolet ((set-if (op node-field bbox-field)
+               `(when (,op (,node-field node) (,bbox-field bbox))
+                  (setf (,bbox-field bbox) (,node-field node)))))
+    (set-if < node-lon bbox-min-lon)
+    (set-if < node-lat bbox-min-lat)
+    (set-if > node-lon bbox-max-lon)
+    (set-if > node-lat bbox-max-lat)
+    bbox))
+
+(defun calc-way-bbox (way)
+  (let ((bbox (make-bbox)))
+    (loop for node-id across (way-refs way)
+         do (let ((node (bsearch *nodes-btree* node-id)))
+              (when node (update-bbox-by-node bbox node))))
+    bbox))
+
+(defparameter *way-bboxes* (make-hash-table :test 'eq))
+
+(defun make-ways-bboxes ()
+  (clrhash *way-bboxes*)
+  (loop for way-id in *ways-dump-reverse-order*
+       do (let ((way (bsearch *ways-btree* way-id)))
+            (when way
+              (setf (gethash (way-id way) *way-bboxes*)
+                    (calc-way-bbox way)))))
+  *way-bboxes*)
+
+(defun add-bboxes (dest-bbox src-bbox)
+  (setf (bbox-min-lon dest-bbox) (min (bbox-min-lon dest-bbox) (bbox-min-lon src-bbox))
+        (bbox-min-lat dest-bbox) (min (bbox-min-lat dest-bbox) (bbox-min-lat src-bbox))
+        (bbox-max-lon dest-bbox) (max (bbox-max-lon dest-bbox) (bbox-max-lon src-bbox))
+        (bbox-max-lat dest-bbox) (max (bbox-max-lat dest-bbox) (bbox-max-lat src-bbox)))
+  dest-bbox)
+
+(defun copy-bbox (bbox)
+  (make-bbox :min-lon (bbox-min-lon bbox) :min-lat (bbox-min-lat bbox)
+             :max-lon (bbox-max-lon bbox) :max-lat (bbox-max-lat bbox)))
+
+(defparameter *relation-bboxes* (make-hash-table :test 'eq))
+
+(defun make-relation-bboxes ()
+  (clrhash *relation-bboxes*)
+  (loop for rel-id in *relations-dump-reverse-order*
+       do (let ((rel (bsearch *relations-btree* rel-id)))
+            (when rel
+              (let ((bbox nil))
+                (loop for mem across (relation-members rel)
+                     do (when (eq (rel-member-type mem) 1)
+                          (let ((way-bbox (or (gethash (rel-member-id mem) *way-bboxes*)
+                                              (let ((way (bsearch *ways-btree* (rel-member-id mem))))
+                                                (when way (calc-way-bbox way))))))
+                            (when way-bbox
+                              (if bbox
+                                  (add-bboxes bbox way-bbox)
+                                  (setf bbox (copy-bbox way-bbox)))))))
+                (when bbox (setf (gethash rel-id *relation-bboxes*) bbox))))))
+  *relation-bboxes*)
+

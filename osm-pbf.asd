@@ -16,7 +16,7 @@
                (:protobuf-source-file "osmbtree")
                (:protobuf-source-file "bbox")
                (:file "b-tree" :depends-on ("btree"))
-               (:file "in-mem-str" :depends-on ("osmbtree"))
+               (:file "in-mem-str" :depends-on ("osmbtree" "bbox"))
                (:file "osm-index-search" :depends-on ("osmformat" "fileformat" "btree" "osmbtree"))
                (:file "osm-writer" :depends-on ("osmformat" "fileformat" "b-tree" "in-mem-str"))
                (:file "osm-reader" :depends-on ("osmformat" "fileformat" "b-tree" "osm-writer" "in-mem-str"))))

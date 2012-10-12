@@ -275,28 +275,35 @@
             ((= x lon2) (values t nil t))
             (t nil))))))
 
+(defun bbox-right-of-coord (bbox lon lat)
+  (check-right-ray-cross lon lat (btreepbf:min-lon bbox) (btreepbf:min-lat bbox)
+                         (+ (btreepbf:min-lon bbox) (btreepbf:max-lon bbox))
+                         (+ (btreepbf:min-lat bbox) (btreepbf:max-lat bbox))))
+
 (defun count-right-ray-cross (sd relation lon lat)
   (let ((cnt 0)
         (point-crossed (make-hash-table)))
     (loop for way in (load-ways-for-relation sd relation)
        do (if way
-              (let ((prev-node nil))
-                (dolist (node (load-nodes-for-way sd way))
-                  (when prev-node
-                    (multiple-value-bind
-                          (cross in-p1 in-p2)
-                        (check-right-ray-cross lon lat
-                                               (osmpbf:lon prev-node) (osmpbf:lat prev-node)
-                                               (osmpbf:lon node) (osmpbf:lat node))
-                      (when cross
-                        (when (or
-                               (and (not in-p1) (not in-p2))
-                               (and in-p1 (not (gethash (osmpbf:id prev-node) point-crossed)))
-                               (and in-p2 (not (gethash (osmpbf:id node) point-crossed))))
-                          (incf cnt)
-                          (when in-p1 (setf (gethash (osmpbf:id prev-node) point-crossed) t))
-                          (when in-p2 (setf (gethash (osmpbf:id node) point-crossed) t))))))
-                  (setf prev-node node)))
+              (let ((waybb (find-by-id-bbox sd (osmpbf:id way) :way-bbox-id)))
+                (unless (and waybb (not (bbox-right-of-coord waybb lon lat)))
+                  (let ((prev-node nil))
+                    (dolist (node (load-nodes-for-way sd way))
+                      (when prev-node
+                        (multiple-value-bind
+                              (cross in-p1 in-p2)
+                            (check-right-ray-cross lon lat
+                                                   (osmpbf:lon prev-node) (osmpbf:lat prev-node)
+                                                   (osmpbf:lon node) (osmpbf:lat node))
+                          (when cross
+                            (when (or
+                                   (and (not in-p1) (not in-p2))
+                                   (and in-p1 (not (gethash (osmpbf:id prev-node) point-crossed)))
+                                   (and in-p2 (not (gethash (osmpbf:id node) point-crossed))))
+                              (incf cnt)
+                              (when in-p1 (setf (gethash (osmpbf:id prev-node) point-crossed) t))
+                              (when in-p2 (setf (gethash (osmpbf:id node) point-crossed) t))))))
+                      (setf prev-node node)))))
               ;; some ways are missing for this relation - dont check it
               (return-from count-right-ray-cross 0)))
     cnt))
@@ -304,24 +311,19 @@
 (defparameter *lat* 478426580)
 (defparameter *lon* 350764960)
 
+(defun coord-in-bbox-p (lon lat bbox)
+  (and (>= lon (btreepbf:min-lon bbox)) (>= lat (btreepbf:min-lon bbox))
+       (<= lon (+ (btreepbf:min-lon bbox) (btreepbf:max-lon bbox)))
+       (<= lat (+ (btreepbf:min-lat bbox) (btreepbf:max-lat bbox)))))
+
 (defun count-test ()
-  (for-every *sd* :relation-id 
+  (for-every *sd* :relation-id
              #'(lambda (x)
                  (let* ((rel (item-deserializer *sd* x :relation))
-                        (cnt (count-right-ray-cross *sd* rel *lon* *lat*)))
-                   (unless (zerop cnt)
-                     (format t "~A ~A~%" (osmpbf:id rel) cnt))))))
+                        (bbox (find-by-id-bbox *sd* (osmpbf:id rel) :relation-bbox-id)))
+                   (when (and bbox (coord-in-bbox-p *lon* *lat* bbox))
+                     (let ((cnt (count-right-ray-cross *sd* rel *lon* *lat*)))
+                       (unless (zerop cnt)
+                         (format t "~A ~A~%" (osmpbf:id rel) cnt))))))))
 
-;; relations and cross counts
-;; 71980 2
-;; 101746 3
-;; 1738023 3
-;; 1738024 3
-;; 1738035 2
-;; 1738038 3
-;; 1738042 2
-;; 1742286 3
-;; 1742287 3
-;; 1742305 3
-;; 1742310 2
 

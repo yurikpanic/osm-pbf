@@ -315,24 +315,13 @@ Used to adjust the offset of particular node data in blob.")
 
 (defparameter *way-bboxes-btree* (make-empty-btree 20))
 
-(defun make-ways-bboxes ()
+(defun make-way-bboxes ()
   (loop for way-id in *ways-dump-reverse-order*
        do (let ((way (bsearch *ways-btree* way-id)))
             (when way
               (binsert *way-bboxes-btree* (way-id way)
                        (calc-way-bbox way)))))
   (btree-size *way-bboxes-btree*))
-
-(defun add-bboxes (dest-bbox src-bbox)
-  (setf (bbox-min-lon dest-bbox) (min (bbox-min-lon dest-bbox) (bbox-min-lon src-bbox))
-        (bbox-min-lat dest-bbox) (min (bbox-min-lat dest-bbox) (bbox-min-lat src-bbox))
-        (bbox-max-lon dest-bbox) (max (bbox-max-lon dest-bbox) (bbox-max-lon src-bbox))
-        (bbox-max-lat dest-bbox) (max (bbox-max-lat dest-bbox) (bbox-max-lat src-bbox)))
-  dest-bbox)
-
-(defun copy-bbox (bbox)
-  (make-bbox :min-lon (bbox-min-lon bbox) :min-lat (bbox-min-lat bbox)
-             :max-lon (bbox-max-lon bbox) :max-lat (bbox-max-lat bbox)))
 
 (defparameter *relation-bboxes-btree* (make-empty-btree 20))
 
@@ -348,7 +337,7 @@ Used to adjust the offset of particular node data in blob.")
                                                 (when way (calc-way-bbox way))))))
                             (when way-bbox
                               (if bbox
-                                  (add-bboxes bbox way-bbox)
+                                  (extend-bbox bbox way-bbox)
                                   (setf bbox (copy-bbox way-bbox)))))))
                 (when bbox (binsert *relation-bboxes-btree* rel-id bbox))))))
   (btree-size *relation-bboxes-btree*))

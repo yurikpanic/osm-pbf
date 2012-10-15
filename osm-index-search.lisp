@@ -276,6 +276,7 @@
             (t nil))))))
 
 (defun bbox-right-of-coord (bbox lon lat)
+  ;; FIXME: check for crossin lat (vertical boundaries), not diagonal
   (check-right-ray-cross lon lat (btreepbf:min-lon bbox) (btreepbf:min-lat bbox)
                          (+ (btreepbf:min-lon bbox) (btreepbf:max-lon bbox))
                          (+ (btreepbf:min-lat bbox) (btreepbf:max-lat bbox))))

@@ -20,7 +20,8 @@
            :relation-blob-num :relation-offs-in-blob :relation-pb-size
            :relation-mem-roles-st
 
-           :make-bbox
+           :bbox 
+           :make-bbox :copy-bbox :copy-to-bbox :extend-bbox
            :bbox-min-lon :bbox-min-lat
            :bbox-max-lon :bbox-max-lat
            :make-bbox-leaf))
@@ -66,6 +67,19 @@
   (min-lat 3600000000 :type (unsigned-byte 64))
   (max-lon 0 :type (unsigned-byte 64))
   (max-lat 0 :type (unsigned-byte 64)))
+
+(defun copy-to-bbox (dst src)
+  (setf (bbox-min-lon dst) (bbox-min-lon src)
+        (bbox-min-lat dst) (bbox-min-lat src)
+        (bbox-max-lon dst) (bbox-max-lon src)
+        (bbox-max-lat dst) (bbox-max-lat src)))
+
+(defun extend-bbox (dst src)
+  (setf (bbox-min-lon dst) (min (bbox-min-lon dst) (bbox-min-lon src))
+        (bbox-min-lat dst) (min (bbox-min-lat dst) (bbox-min-lat src))
+        (bbox-max-lon dst) (max (bbox-max-lon dst) (bbox-max-lon src))
+        (bbox-max-lat dst) (max (bbox-max-lat dst) (bbox-max-lat src)))
+  dst)
 
 (defmacro make-index-arr-any (val type)
   (let ((blob-index (gensym))

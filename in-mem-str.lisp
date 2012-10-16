@@ -22,6 +22,7 @@
 
            :bbox 
            :make-bbox :copy-bbox :copy-to-bbox :extend-bbox
+           :bbox-area :bbox-margin :bbox-overlap
            :bbox-min-lon :bbox-min-lat
            :bbox-max-lon :bbox-max-lat
            :make-bbox-leaf))
@@ -80,6 +81,23 @@
         (bbox-max-lon dst) (max (bbox-max-lon dst) (bbox-max-lon src))
         (bbox-max-lat dst) (max (bbox-max-lat dst) (bbox-max-lat src)))
   dst)
+
+(defun bbox-area (bbox)
+  (* (- (bbox-max-lon bbox) (bbox-min-lon bbox)) (- (bbox-max-lat bbox) (bbox-min-lat bbox))))
+
+(defun bbox-margin (bbox)
+  (* 2 (+ (- (bbox-max-lon bbox) (bbox-min-lon bbox)) (- (bbox-max-lat bbox) (bbox-min-lat bbox)))))
+
+(defun bbox-overlap (bbox1 bbox2)
+  "Calculate the overlap of bboxes"
+  (let ((res (make-bbox
+              :min-lon (max (bbox-min-lon bbox1) (bbox-min-lon bbox2))
+              :min-lat (max (bbox-min-lat bbox1) (bbox-min-lat bbox2))
+              :max-lon (min (bbox-max-lon bbox1) (bbox-max-lon bbox2))
+              :max-lat (min (bbox-max-lat bbox1) (bbox-max-lat bbox2)))))
+    (unless (or (> (bbox-min-lon res) (bbox-max-lon res))
+                (> (bbox-min-lat res) (bbox-max-lat res)))
+      res)))
 
 (defmacro make-index-arr-any (val type)
   (let ((blob-index (gensym))

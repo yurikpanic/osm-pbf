@@ -85,11 +85,18 @@
           overlap-values (nreverse overlap-values))
     (format t "~A~%~A~%~A~%" area-values margin-values overlap-values)
     (let ((s-lon 0)
-          (s-lat 0))
+          (s-lat 0)
+          (sel-axes)
+          (dist-start))
       (loop for mm in margin-values
            do (incf s-lon (+ (first mm) (second mm)))
            do (incf s-lat (+ (third mm) (fourth mm))))
-      (format t "~A ~A ~A~%" s-lon s-lat (if (< s-lon s-lat) :lon :lat)))))
+      (if (< s-lon s-lat)
+          (setf sel-axes :lon
+                dist-start 0)
+          (setf sel-axes :lat
+                dist-start 2))
+      (format t "~A ~A ~A~%" s-lon s-lat sel-axes))))
 
 (defun tree-insert (node max-children key-bbox data)
   (if (eq (rnode-kind node) :node)

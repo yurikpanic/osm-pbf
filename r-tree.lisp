@@ -96,7 +96,20 @@
                 dist-start 0)
           (setf sel-axes :lat
                 dist-start 2))
-      (format t "~A ~A ~A~%" s-lon s-lat sel-axes))))
+      (format t "~A ~A ~A ~A~%" s-lon s-lat sel-axes dist-start)
+      (let ((min-overlap-k nil)
+            (min-overlap-i nil)
+            (min-overlap most-positive-fixnum))
+        (loop for k from 1
+           for ol in overlap-values
+             do (loop for i from dist-start
+                   repeat 2
+                   for dist-ol in (nthcdr dist-start ol)
+                   do (when (< dist-ol min-overlap)
+                        (setf min-overlap dist-ol
+                              min-overlap-k k
+                              min-overlap-i i))))
+        (format t "~A ~A ~A~%" min-overlap-k min-overlap-i min-overlap)))))
 
 (defun tree-insert (node max-children key-bbox data)
   (if (eq (rnode-kind node) :node)

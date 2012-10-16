@@ -78,51 +78,51 @@
   (tree-insert (car (rtree-root tree)) (rtree-max-children tree) key-bbox data))
 
 
-(defparameter *rtree*
-  #S(RTREE
-     :MAX-CHILDREN 6
-     :ROOT (#S(RNODE
-               :KIND :LEAF
-               :BBOX #S(BBOX
-                        :MIN-LON 232089151
-                        :MIN-LAT 491271921
-                        :MAX-LON 232968719
-                        :MAX-LAT 492671600)
-               :KEYS #(#S(BBOX
-                          :MIN-LON 232292559
-                          :MIN-LAT 491271921
-                          :MAX-LON 232636826
-                          :MAX-LAT 491533113)
-                       #S(BBOX
-                          :MIN-LON 232776909
-                          :MIN-LAT 491353818
-                          :MAX-LON 232963375
-                          :MAX-LAT 491604037)
-                       #S(BBOX
-                          :MIN-LON 232559962
-                          :MIN-LAT 492151262
-                          :MAX-LON 232968719
-                          :MAX-LAT 492436581)
-                       #S(BBOX
-                          :MIN-LON 232089151
-                          :MIN-LAT 492411376
-                          :MAX-LON 232559962
-                          :MAX-LAT 492671600)
-                       #S(BBOX
-                          :MIN-LON 232320923
-                          :MIN-LAT 492331217
-                          :MAX-LON 232559962
-                          :MAX-LAT 492436581)
-                       #S(BBOX
-                          :MIN-LON 232533811
-                          :MIN-LAT 491973017
-                          :MAX-LON 232816143
-                          :MAX-LAT 492063659)
-                       #S(BBOX
-                          :MIN-LON 232577560
-                          :MIN-LAT 492063659
-                          :MAX-LON 232816143
-                          :MAX-LAT 492108386))
-               :SIZE 7
-               :POINTERS #((178489505) (178489280) (30701151) (178488149)
-                           (178488157) (178488155) (30696680))))))
+;; (defparameter *rtree*
+;;   #S(RTREE
+;;      :MAX-CHILDREN 6
+;;      :ROOT (#S(RNODE
+;;                :KIND :LEAF
+;;                :BBOX #S(BBOX
+;;                         :MIN-LON 232089151
+;;                         :MIN-LAT 491271921
+;;                         :MAX-LON 232968719
+;;                         :MAX-LAT 492671600)
+;;                :KEYS #(#S(BBOX
+;;                           :MIN-LON 232292559
+;;                           :MIN-LAT 491271921
+;;                           :MAX-LON 232636826
+;;                           :MAX-LAT 491533113)
+;;                        #S(BBOX
+;;                           :MIN-LON 232776909
+;;                           :MIN-LAT 491353818
+;;                           :MAX-LON 232963375
+;;                           :MAX-LAT 491604037)
+;;                        #S(BBOX
+;;                           :MIN-LON 232559962
+;;                           :MIN-LAT 492151262
+;;                           :MAX-LON 232968719
+;;                           :MAX-LAT 492436581)
+;;                        #S(BBOX
+;;                           :MIN-LON 232089151
+;;                           :MIN-LAT 492411376
+;;                           :MAX-LON 232559962
+;;                           :MAX-LAT 492671600)
+;;                        #S(BBOX
+;;                           :MIN-LON 232320923
+;;                           :MIN-LAT 492331217
+;;                           :MAX-LON 232559962
+;;                           :MAX-LAT 492436581)
+;;                        #S(BBOX
+;;                           :MIN-LON 232533811
+;;                           :MIN-LAT 491973017
+;;                           :MAX-LON 232816143
+;;                           :MAX-LAT 492063659)
+;;                        #S(BBOX
+;;                           :MIN-LON 232577560
+;;                           :MIN-LAT 492063659
+;;                           :MAX-LON 232816143
+;;                           :MAX-LAT 492108386))
+;;                :SIZE 7
+;;                :POINTERS #((178489505) (178489280) (30701151) (178488149)
+;;                            (178488157) (178488155) (30696680))))))

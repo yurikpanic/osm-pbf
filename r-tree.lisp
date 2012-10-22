@@ -109,7 +109,20 @@
                         (setf min-overlap dist-ol
                               min-overlap-k k
                               min-overlap-i i))))
-        (format t "~A ~A ~A~%" min-overlap-k min-overlap-i min-overlap)))))
+        (format t "~A ~A ~A~%" min-overlap-k min-overlap-i min-overlap)
+        (let ((node-1 (make-empty-rnode max-children (rnode-kind node)))
+              (node-2 (make-empty-rnode max-children (rnode-kind node)))
+              (bb-dist (nth min-overlap-i bb-sorted))
+              (first-size (+ min-overlap-k (1- min-children))))
+          (flet ((add-to-rnode (node group-start group-end)
+                   (loop for i from group-start to group-end
+                      for j from 0
+                      do (setf (aref (rnode-keys node) j) (car (aref bb-dist i))
+                               (aref (rnode-pointers node) j) (cdr (aref bb-dist i)))
+                      do (incf (rnode-size node)))))
+            (add-to-rnode node-1 0 (1- first-size))
+            (add-to-rnode node-2 (1+ first-size) (1- (rnode-size node)))
+            (values node-1 node-2 (aref bb-dist first-size))))))))
 
 (defun tree-insert (node max-children key-bbox data)
   (if (eq (rnode-kind node) :node)

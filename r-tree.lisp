@@ -83,7 +83,7 @@
     (setf area-values (nreverse area-values)
           margin-values (nreverse margin-values)
           overlap-values (nreverse overlap-values))
-    (format t "~A~%~A~%~A~%" area-values margin-values overlap-values)
+    ;;(format t "~A~%~A~%~A~%" area-values margin-values overlap-values)
     (let ((s-lon 0)
           (s-lat 0)
           (sel-axes)
@@ -96,7 +96,7 @@
                 dist-start 0)
           (setf sel-axes :lat
                 dist-start 2))
-      (format t "~A ~A ~A ~A~%" s-lon s-lat sel-axes dist-start)
+      ;;(format t "~A ~A ~A ~A~%" s-lon s-lat sel-axes dist-start)
       (let ((min-overlap-k nil)
             (min-overlap-i nil)
             (min-overlap most-positive-fixnum))
@@ -109,7 +109,7 @@
                         (setf min-overlap dist-ol
                               min-overlap-k k
                               min-overlap-i i))))
-        (format t "~A ~A ~A~%" min-overlap-k min-overlap-i min-overlap)
+        ;;(format t "~A ~A ~A~%" min-overlap-k min-overlap-i min-overlap)
         (let ((node-1 (make-empty-rnode max-children (rnode-kind node)))
               (node-2 (make-empty-rnode max-children (rnode-kind node)))
               (bb-dist (nth min-overlap-i bb-sorted))

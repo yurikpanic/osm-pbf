@@ -25,7 +25,8 @@
            :bbox-area :bbox-margin :bbox-overlap
            :bbox-min-lon :bbox-min-lat
            :bbox-max-lon :bbox-max-lat
-           :make-bbox-leaf))
+           :make-bbox-leaf
+           :bbox-from-list))
 
 (in-package :in-mem-str)
 
@@ -98,6 +99,14 @@
     (unless (or (> (bbox-min-lon res) (bbox-max-lon res))
                 (> (bbox-min-lat res) (bbox-max-lat res)))
       res)))
+
+(defun bbox-from-list (data)
+  "convert (list min-lon min-lat max-lon max-lat) to bbox structure"
+  (declare (type list data))
+  (make-bbox :min-lon (first data)
+             :min-lat (second data)
+             :max-lon (third data)
+             :max-lat (fourth data)))
 
 (defmacro make-index-arr-any (val type)
   (let ((blob-index (gensym))

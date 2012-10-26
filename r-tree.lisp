@@ -117,12 +117,10 @@
           (flet ((add-to-rnode (node group-start group-end)
                    (loop for i from group-start to group-end
                       for j from 0
-                      do (setf (aref (rnode-keys node) j) (car (aref bb-dist i))
-                               (aref (rnode-pointers node) j) (cdr (aref bb-dist i)))
-                      do (incf (rnode-size node)))))
+                      do (add-data-to-rnode node (car (aref bb-dist i)) (cadr (aref bb-dist i))))))
             (add-to-rnode node-1 0 (1- first-size))
-            (add-to-rnode node-2 (1+ first-size) (1- (rnode-size node)))
-            (values node-1 node-2 (aref bb-dist first-size))))))))
+            (add-to-rnode node-2 first-size (1- (rnode-size node)))
+            (values node-1 node-2)))))))
 
 (defun tree-insert (node max-children key-bbox data)
   (if (eq (rnode-kind node) :node)
@@ -131,59 +129,34 @@
         (add-data-to-rnode node key-bbox data)
         (if (<= (rnode-size node) max-children)
             node
-            (rnode-split node)))))
+            (rnode-split node max-children)))))
 
 (defun rinsert (tree key-bbox data)
   (declare (type rtree tree)
            (type bbox key-bbox))
-  (tree-insert (car (rtree-root tree)) (rtree-max-children tree) key-bbox data))
+  (multiple-value-bind (node-1 node-2)
+      (tree-insert (car (rtree-root tree)) (rtree-max-children tree) key-bbox data)
+    (when node-2
+      (let ((new-root (make-empty-rnode (rtree-max-children tree) :node)))
+        (add-data-to-rnode new-root (rnode-bbox node-1) node-1)
+        (add-data-to-rnode new-root (rnode-bbox node-2) node-2)
+        (setf (rtree-root tree) (list new-root))))
+    tree))
 
 
-;; (defparameter *rtree*
-;;   #S(RTREE
-;;      :MAX-CHILDREN 6
-;;      :ROOT (#S(RNODE
-;;                :KIND :LEAF
-;;                :BBOX #S(BBOX
-;;                         :MIN-LON 232089151
-;;                         :MIN-LAT 491271921
-;;                         :MAX-LON 232968719
-;;                         :MAX-LAT 492671600)
-;;                :KEYS #(#S(BBOX
-;;                           :MIN-LON 232292559
-;;                           :MIN-LAT 491271921
-;;                           :MAX-LON 232636826
-;;                           :MAX-LAT 491533113)
-;;                        #S(BBOX
-;;                           :MIN-LON 232776909
-;;                           :MIN-LAT 491353818
-;;                           :MAX-LON 232963375
-;;                           :MAX-LAT 491604037)
-;;                        #S(BBOX
-;;                           :MIN-LON 232559962
-;;                           :MIN-LAT 492151262
-;;                           :MAX-LON 232968719
-;;                           :MAX-LAT 492436581)
-;;                        #S(BBOX
-;;                           :MIN-LON 232089151
-;;                           :MIN-LAT 492411376
-;;                           :MAX-LON 232559962
-;;                           :MAX-LAT 492671600)
-;;                        #S(BBOX
-;;                           :MIN-LON 232320923
-;;                           :MIN-LAT 492331217
-;;                           :MAX-LON 232559962
-;;                           :MAX-LAT 492436581)
-;;                        #S(BBOX
-;;                           :MIN-LON 232533811
-;;                           :MIN-LAT 491973017
-;;                           :MAX-LON 232816143
-;;                           :MAX-LAT 492063659)
-;;                        #S(BBOX
-;;                           :MIN-LON 232577560
-;;                           :MIN-LAT 492063659
-;;                           :MAX-LON 232816143
-;;                           :MAX-LAT 492108386))
-;;                :SIZE 7
-;;                :POINTERS #((178489505) (178489280) (30701151) (178488149)
-;;                            (178488157) (178488155) (30696680))))))
+(defparameter *bbox-test-data* '((232292559 491271921 232636826 491533113)
+                                 (232776909 491353818 232963375 491604037)
+                                 (232559962 492151262 232968719 492436581)
+                                 (232089151 492411376 232559962 492671600)
+                                 (232320923 492331217 232559962 492436581)
+                                 (232533811 491973017 232816143 492063659)
+                                 (232577560 492063659 232816143 492108386)))
+
+(defparameter *id-test-data* '(178489505 178489280 30701151 178488149 178488157 178488155 30696680))
+
+;;;; New empty btree
+;; (defparameter *rtree* (make-empty-rtree))
+;;;; Fill it to max-children
+;; (loop for bb in *bbox-test-data* for id in *id-test-data* for i from 1 to 6 do (rinsert *rtree* (bbox-from-list bb) id))
+;;;; Add one more to test node-split
+;; (rinsert *rtree* (bbox-from-list (nth 6 *bbox-test-data*)) (nth 6 *id-test-data*))

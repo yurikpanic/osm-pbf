@@ -122,9 +122,19 @@
             (add-to-rnode node-2 first-size (1- (rnode-size node)))
             (values node-1 node-2)))))))
 
+(defun choose-subtree (node key-bbox)
+  "Choose subtree to insert data with key-bbox"
+  (if (eq (rnode-kind (car (aref (rnode-pointers node) 0))) :leaf)
+      (progn
+        ;; minimal overlap enlargement
+        )
+      (progn
+        ;; minimal area enlargement
+        )))
+
 (defun tree-insert (node max-children key-bbox data)
   (if (eq (rnode-kind node) :node)
-      (progn)
+      (let ((node-to-descend (choose-subtree node key-bbox))))
       (when (eq (rnode-kind node) :leaf)
         (add-data-to-rnode node key-bbox data)
         (if (<= (rnode-size node) max-children)

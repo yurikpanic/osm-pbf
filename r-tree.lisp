@@ -122,12 +122,24 @@
             (add-to-rnode node-2 first-size (1- (rnode-size node)))
             (values node-1 node-2)))))))
 
+(defun calc-overlap-with-data (key-bbox node)
+  "Calulate overlap of key-bbox with every data bbox in this node"
+  (loop for i from 0 to (1- (rnode-size node))
+       summing (bbox-area (bbox-overlap key-bbox (aref (rnode-keys node) i)))))
+
 (defun choose-subtree (node key-bbox)
   "Choose subtree to insert data with key-bbox"
   (if (eq (rnode-kind (car (aref (rnode-pointers node) 0))) :leaf)
-      (progn
-        ;; minimal overlap enlargement
-        )
+      ;; minimal overlap enlargement
+      (let ((min-overlap (calc-overlap-with-data key-bbox (car (aref (rnode-pointers node) 0))))
+            (min-overlap-idx 0))
+        (format t "0: ~A~%" min-overlap)
+        (loop for i from 1 to (1- (rnode-size node))
+             do (let ((cur-overlap (calc-overlap-with-data key-bbox (car (aref (rnode-pointers node) i)))))
+                  (format t "~D: ~A~%" i cur-overlap)
+                  (when (< cur-overlap min-overlap) (setf min-overlap cur-overlap
+                                                          min-overlap-idx i))))
+        min-overlap-idx)
       (progn
         ;; minimal area enlargement
         )))

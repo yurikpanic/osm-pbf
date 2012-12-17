@@ -374,3 +374,10 @@ Used to adjust the offset of particular node data in blob.")
     (write-btree w *way-bboxes-btree* #'make-bbox-leaf "way-bbox" "id")
     (write-btree w *relation-bboxes-btree* #'make-bbox-leaf "relation-bbox" "id")
     (end-write w)))
+
+(defun save-ways-to-db ()
+  (dolist (way-id *ways-dump-reverse-order*)
+    (let ((way (bsearch *ways-btree* way-id)))
+      (when way
+        (format t "way ~A~%" way-id)
+        (db:write-way way *nodes-btree*)))))

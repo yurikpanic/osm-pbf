@@ -381,3 +381,9 @@ Used to adjust the offset of particular node data in blob.")
       (when way
         (format t "way ~A~%" way-id)
         (db:write-way way *nodes-btree*)))))
+
+(defun save-relations-to-db ()
+  (dolist (rel-id *relations-dump-reverse-order*)
+    (let ((rel (bsearch *relations-btree* rel-id)))
+      (when (and rel (db:check-rel-members rel))
+        (db:write-rel rel)))))

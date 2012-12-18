@@ -90,6 +90,16 @@
 (defvar *ways-btree* (make-empty-btree 20))
 (defvar *relations-btree* (make-empty-btree 20))
 
+(defun clear-loaded-data ()
+  (clrhash *ways-to-dump*)
+  (clrhash *nodes-to-dump*)
+  (setf *nodes-dump-reverse-order* nil
+        *ways-dump-reverse-order* nil
+        *relations-dump-reverse-order* nil
+        *nodes-btree* (make-empty-btree 20)
+        *ways-btree* (make-empty-btree 20)
+        *relations-btree* (make-empty-btree 20)))
+
 (defun find-tag (tags key)
   (dolist (tag tags)
     (when (string= (car tag) key)
@@ -151,20 +161,21 @@
   (let ((new-ways (make-array (length ways) :element-type 'way :initial-element (make-way))))
     (loop for way across ways
          for i from 0
-         do (let ((new-way (make-way :id (osmpbf:id way)
-                                     :tags (read-keyval-parr (osmpbf:keys way) (osmpbf:vals way) st-arr)
-                                     :refs (make-array (length (osmpbf:refs way)) :element-type '(unsigned-byte 64) :initial-element 0)))
-                  (prev-ref 0))
+         do (let* ((new-way (make-way :id (osmpbf:id way)
+                                      :tags (read-keyval-parr (osmpbf:keys way) (osmpbf:vals way) st-arr)
+                                      :refs (make-array (length (osmpbf:refs way)) :element-type '(unsigned-byte 64) :initial-element 0)))
+                   (is-building (equal (cdr (find-tag (way-tags new-way) "building")) "yes"))
+                   (prev-ref 0))
               (loop for rr across (osmpbf:refs way)
                    for j from 0
                    do (let ((new-ref (+ prev-ref rr)))
-                        (when (gethash (way-id new-way) *ways-to-dump*)
+                        (when (or is-building (gethash (way-id new-way) *ways-to-dump*))
                           (unless (gethash new-ref *nodes-to-dump*)
                             (setf *nodes-dump-reverse-order* (cons new-ref *nodes-dump-reverse-order*)))
                           (setf (gethash new-ref *nodes-to-dump*) t))
                         (setf (aref (way-refs new-way) j) new-ref
                               prev-ref new-ref)))
-              (when (gethash (way-id new-way) *ways-to-dump*)
+              (when (or is-building (gethash (way-id new-way) *ways-to-dump*))
                 (binsert *ways-btree* (way-id new-way) new-way))
               (setf (aref new-ways i) new-way)))
     new-ways))
@@ -187,7 +198,9 @@
                           (setf prev-mem-id (rel-member-id new-rel-member)
                                 (aref (relation-members new-rel) j) new-rel-member)))))
               (setf (aref new-rels i) new-rel)
-              (when (equal (cdr (find-tag (relation-tags new-rel) "boundary")) "administrative")
+              (when (or
+                     (equal (cdr (find-tag (relation-tags new-rel) "boundary")) "administrative")
+                     (equal (cdr (find-tag (relation-tags new-rel) "building")) "yes"))
                 (loop for member across (relation-members new-rel)
                    do (progn
                         (when (= (rel-member-type member) 1)
@@ -376,14 +389,31 @@ Used to adjust the offset of particular node data in blob.")
     (end-write w)))
 
 (defun save-ways-to-db ()
-  (dolist (way-id *ways-dump-reverse-order*)
-    (let ((way (bsearch *ways-btree* way-id)))
-      (when way
-        (format t "way ~A~%" way-id)
-        (db:write-way way *nodes-btree*)))))
+  (dolist (way (btree-data-list *ways-btree*))
+    (format t "way ~A" (way-id way))
+    (db:write-way way *nodes-btree*)
+    (when (and
+           (equal (cdr (find-tag (way-tags way) "building")) "yes")
+           (or (find-tag (way-tags way) "name")
+               (and (find-tag (way-tags way) "addr:street")
+                    (find-tag (way-tags way) "addr:housenumber"))))
+      (format t " - building")
+      (db:write-building-way way))
+    (format t "~%")))
 
 (defun save-relations-to-db ()
-  (dolist (rel-id *relations-dump-reverse-order*)
-    (let ((rel (bsearch *relations-btree* rel-id)))
-      (when (and rel (db:check-rel-members rel))
-        (db:write-rel rel)))))
+  (dolist (rel (btree-data-list *relations-btree*))
+    (when (db:check-rel-members rel)
+      (cond
+        ((equal (cdr (find-tag (relation-tags rel) "boundary")) "administrative")
+         (format t "boundary: ~A~%" (relation-id rel))
+         (db:write-boundary rel))
+        ((and
+          (equal (cdr (find-tag (relation-tags rel) "building")) "yes")
+          (or (find-tag (relation-tags rel) "name")
+              (and (find-tag (relation-tags rel) "addr:street")
+                   (find-tag (relation-tags rel) "addr:housenumber"))))
+         (format t "building: ~A~%" (relation-id rel))
+         (db:write-building-rel rel)))))
+  ;; (db:create-boundary-polys)
+  )

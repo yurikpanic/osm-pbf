@@ -21,4 +21,4 @@
                (:file "osm-index-search" :depends-on ("osmformat" "fileformat" "btree" "osmbtree" "bbox"))
                (:file "osm-writer" :depends-on ("osmformat" "fileformat" "b-tree" "in-mem-str"))
                (:file "osm-reader" :depends-on ("osmformat" "fileformat" "b-tree" "osm-writer" "in-mem-str" "postgis"))
-               (:file "postgis" :depends-on ("b-tree" "in-mem-str"))))
+               (:file "postgis" :depends-on ("b-tree" "in-mem-str" "osmformat"))))

@@ -16,7 +16,7 @@
 
 (defvar *last-block-processed* nil)
 
-(defun read-osm-file (&key (file-name #p"/home/yuri/work/globus/osm/ukraine.osm.pbf") (skip-to-block 0) count process-only)
+(defun read-osm-file (&key (file-name #p"/home/yuri/work/globus/osm/ukraine.osm.pbf") (skip-to-block 0) count process-only stream)
   (with-open-file (fs file-name :direction :input :element-type 'unsigned-byte)
     (do ((i 0 (1+ i))
          (file-size (file-length fs))
@@ -52,7 +52,9 @@
                               ((string= (pb:string-value (osmpbf:type blob-header)) "OSMHeader")
                                (read-osm-header data))
                               ((string= (pb:string-value (osmpbf:type blob-header)) "OSMData")
-                               (read-osm-data data process-only)
+                               (if stream
+                                   (stream-osm-data data)
+                                   (read-osm-data data process-only))
                                (incf proc-count)
                                (when (and count (>= proc-count count))
                                  (return-from read-osm-file)))))

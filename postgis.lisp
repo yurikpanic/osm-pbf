@@ -15,7 +15,10 @@
            :write-building-rel
            :write-building-way
            :create-building-polys
-           :query-point))
+           :query-point
+
+           :update-stringtable
+           :store-node))
 
 (in-package :osm-postgis)
 
@@ -172,3 +175,33 @@
 ;;      (when (or (first (second cc)) (second (second cc)))
 ;;        (format t "========~%~A~%" c)
 ;;        (format t "~A~%" cc)))))
+
+
+
+(defun update-stringtable (st)
+  (let ((idx (make-array (length st) :element-type '(unsigned-byte 64))))
+    (loop for os across st
+       for i from 0
+       do (let* ((s (sb-ext:octets-to-string os))
+                 (sb-id (query (:select 'id :from 'stringtable :where (:= 's s)) :single))
+                 (new-id (unless sb-id
+                           (let ((new-id
+                                  (query (:select (:nextval "st_seq")) :single)))
+                             (execute (:insert-into 'stringtable :set
+                                                    'id new-id
+                                                    's s))
+                             new-id))))
+            (setf (aref idx i) (or new-id sb-id))))
+    idx))
+
+(defun store-node (id lon lat tags)
+  (let ((point-str (format nil "SRID=4326;POINT(~F ~F)" lon lat)))
+    (with-transaction ()
+      (execute (:insert-into 'node :set
+                             'id id
+                             'point (:st-geomfromewkt point-str)))
+      (dolist (tag tags)
+        (execute (:insert-into 'node-tags :set
+                               'node-id id
+                               'key-id (car tag)
+                               'val-id (cdr tag)))))))

@@ -42,6 +42,31 @@
                   prev-lat lat
                   prev-lon lon)))))
 
+(defun stream-ways (ways st-idx)
+  (loop for way across ways
+       do (let* ((tags (loop for k across (osmpbf:keys way)
+                          for v across (osmpbf:vals way)
+                          collect (cons (aref st-idx k) (aref st-idx v))))
+                 (prev-ref nil)
+                 (refs (loop for r across (osmpbf:refs way)
+                            collect (let ((cur-ref (if prev-ref (+ prev-ref r) r)))
+                                      (setf prev-ref cur-ref)))))
+            (db:store-way (osmpbf:id way) refs tags))))
+
+(defun stream-relations (relations st-idx)
+  (loop for relation across relations
+       do (let* ((tags (loop for k across (osmpbf:keys relation)
+                          for v across (osmpbf:vals relation)
+                          collect (cons (aref st-idx k) (aref st-idx v))))
+                 (prev-member nil)
+                 (members (loop for r across (osmpbf:memids relation)
+                               for mt across (osmpbf:types relation)
+                             collect (let ((cur-member (if prev-member (+ prev-member r) r)))
+                                       (setf prev-member cur-member)
+                                       (cons cur-member mt)))))
+            (db:store-relation (osmpbf:id relation) members tags))))
+
+
 (defun stream-osm-data (data)
   "stream osm data to postgis database"
   (let ((pblock (make-instance 'osmpbf:primitive-block)))
@@ -54,4 +79,6 @@
                     (stream-dense (osmpbf:dense pgroup) st-idx
                                   (osmpbf:granularity pblock)
                                   (osmpbf:lat-offset pblock)
-                                  (osmpbf:lon-offset pblock)))))))))
+                                  (osmpbf:lon-offset pblock)))
+                  (stream-ways (osmpbf:ways pgroup) st-idx)
+                  (stream-relations (osmpbf:relations pgroup) st-idx)))))))

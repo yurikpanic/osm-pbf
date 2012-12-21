@@ -18,7 +18,9 @@
            :query-point
 
            :update-stringtable
-           :store-node))
+           :store-node
+           :store-way
+           :store-relation))
 
 (in-package :osm-postgis)
 
@@ -47,7 +49,7 @@
   (let ((ls (make-way-linestring way nodes-btree)))
     (when ls
       (execute
-       (format nil "insert into way values (~D, st_geomfromewkt(~A))" (way-id way) (sql-escape ls)))
+       (format nil "insert into way_geom values (~D, st_geomfromewkt(~A))" (way-id way) (sql-escape ls)))
       t)))
 
 
@@ -57,7 +59,7 @@
     (loop for mem across (relation-members rel)
        do
          (when (= (rel-member-type mem) osmpbf:+relation-member-type-way+)
-           (if (query (:select 'id :from 'way :where (:= 'id (rel-member-id mem))) :single)
+           (if (query (:select 'id :from 'way-geom :where (:= 'id (rel-member-id mem))) :single)
                (setf found t)
                (return-from check-rel-members nil))))
     found))
@@ -95,7 +97,7 @@
 
 (defun create-boundary-polys ()
   (with-transaction ()
-    (execute "select boundary.id as id, (st_dump(st_polygonize(geom))).geom as geom into boundary_poly from boundary left join relation_ways on (boundary.id = rel_id) left join way on (way_id = way.id) group by boundary.id")
+    (execute "select boundary.id as id, (st_dump(st_polygonize(geom))).geom as geom into boundary_poly from boundary left join relation_ways on (boundary.id = rel_id) left join way_geom on (way_id = way_geom.id) group by boundary.id")
     (execute "CREATE INDEX boundary_poly_geom on boundary_poly using gist(geom)")))
 
 (defun write-building-rel (rel)
@@ -120,7 +122,7 @@
 
 (defun create-building-polys ()
   (with-transaction ()
-    (execute "select building.id as id, (st_dump(st_polygonize(geom))).geom as geom into building_poly from building left join relation_ways on (building.id = rel_id) left join way on (way_id = way.id)where is_rel = true group by building.id")
+    (execute "select building.id as id, (st_dump(st_polygonize(geom))).geom as geom into building_poly from building left join relation_ways on (building.id = rel_id) left join way_geom on (way_id = way.id)where is_rel = true group by building.id")
     (execute "insert into building_poly select building.id as id, (st_dump(st_polygonize(geom))).geom as geom from building left join way on (building.id = way.id) where is_rel = false group by building.id")
     (execute "CREATE INDEX building_poly_geom on building_poly using gist(geom)")))
 
@@ -205,3 +207,30 @@
                                'node-id id
                                'key-id (car tag)
                                'val-id (cdr tag)))))))
+
+(defun store-way (id refs tags)
+  (with-transaction ()
+    (execute (:insert-into 'way :set 'id id))
+    (dolist (ref refs)
+      (execute (:insert-into 'way-refs :set
+                             'way-id id
+                             'node-id ref)))
+    (dolist (tag tags)
+      (execute (:insert-into 'way-tags :set
+                             'way-id id
+                             'key-id (car tag)
+                             'val-id (cdr tag))))))
+
+(defun store-relation (id members tags)
+  (with-transaction ()
+    (execute (:insert-into 'relation :set 'id id))
+    (dolist (member members)
+      (execute (:insert-into 'relation-members :set
+                             'relation-id id
+                             'member-id (car member)
+                             'member-type (cdr member))))
+    (dolist (tag tags)
+      (execute (:insert-into 'relation-tags :set
+                             'relation-id id
+                             'key-id (car tag)
+                             'val-id (cdr tag))))))

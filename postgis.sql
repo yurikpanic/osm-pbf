@@ -74,4 +74,10 @@ insert into boundary (select boundary_ids.relation_id, boundary_names.s, boundar
                              left join boundary_names_ru on (boundary_ids.relation_id = boundary_names_ru.relation_id)
                              left join boundary_names_en on (boundary_ids.relation_id = boundary_names_en.relation_id)
                              left join boundary_admin_levels on (boundary_ids.relation_id = boundary_admin_levels.relation_id and boundary_admin_levels.s ~ '^[0-9]*$'));
+
+drop table boundary_ids;
+drop table boundary_names;
+drop table boundary_names_ru;
+drop table boundary_names_en;
+drop table boundary_admin_levels;
 end;

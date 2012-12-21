@@ -36,6 +36,7 @@ create table way_tags (
        val_id bigint);
 create index way_tags_way_id on way_tags (way_id);
 create index way_tags_key_id on way_tags(key_id);
+create index way_tags_key_id_val_id on way_tags(key_id, val_id);
 
 create table way_refs (
        way_id bigint,
@@ -50,6 +51,7 @@ create table relation_tags (
        key_id bigint,
        val_id bigint);
 create index relation_tags_relation_id on relation_tags (relation_id);
+create index relation_tags_key_id on relation_tags(key_id);
 create index relation_tags_key_id_val_id on relation_tags(key_id, val_id);
 
 create table relation_members (
@@ -80,4 +82,41 @@ drop table boundary_names;
 drop table boundary_names_ru;
 drop table boundary_names_en;
 drop table boundary_admin_levels;
+end;
+
+begin;
+select relation_id into temp building_ids from relation_tags where relation_tags.key_id = (SELECT id from stringtable where s = 'building') and relation_tags.val_id = (SELECT id from stringtable where s = 'yes');
+SELECT relation_id, s into temp building_names from relation_tags left join stringtable on (relation_tags.val_id = stringtable.id) where relation_id in (select * from building_ids) and key_id = (SELECT id from stringtable where s = 'name');
+SELECT relation_id, s into temp building_streets from relation_tags left join stringtable on (relation_tags.val_id = stringtable.id) where relation_id in (select * from building_ids) and key_id = (SELECT id from stringtable where s = 'addr:street');
+SELECT relation_id, s into temp building_housenumbers from relation_tags left join stringtable on (relation_tags.val_id = stringtable.id) where relation_id in (select * from building_ids) and key_id = (SELECT id from stringtable where s = 'addr:housenumber');
+
+insert into building (select building_ids.relation_id, building_names.s, building_streets.s, building_housenumbers.s, true
+                             from building_ids
+                             left join building_names on (building_ids.relation_id = building_names.relation_id)
+                             left join building_streets on (building_ids.relation_id = building_streets.relation_id)
+                             left join building_housenumbers on (building_ids.relation_id = building_housenumbers.relation_id));
+
+drop table building_ids;
+drop table building_names;
+drop table building_streets;
+drop table building_housenumbers;
+end;
+
+
+begin;
+select way_id into temp building_ids from way_tags where way_tags.key_id = (SELECT id from stringtable where s = 'building') and way_tags.val_id = (SELECT id from stringtable where s = 'yes');
+SELECT way_id, s into temp building_names from way_tags left join stringtable on (way_tags.val_id = stringtable.id) where way_id in (select * from building_ids) and key_id = (SELECT id from stringtable where s = 'name');
+SELECT way_id, s into temp building_streets from way_tags left join stringtable on (way_tags.val_id = stringtable.id) where way_id in (select * from building_ids) and key_id = (SELECT id from stringtable where s = 'addr:street');
+SELECT way_id, s into temp building_housenumbers from way_tags left join stringtable on (way_tags.val_id = stringtable.id) where way_id in (select * from building_ids) and key_id = (SELECT id from stringtable where s = 'addr:housenumber');
+
+insert into building (select building_ids.way_id, building_names.s, building_streets.s, building_housenumbers.s, false
+                             from building_ids
+                             left join building_names on (building_ids.way_id = building_names.way_id)
+                             left join building_streets on (building_ids.way_id = building_streets.way_id)
+                             left join building_housenumbers on (building_ids.way_id = building_housenumbers.way_id));
+
+drop table building_ids;
+drop table building_names;
+drop table building_streets;
+drop table building_housenumbers;
 end;

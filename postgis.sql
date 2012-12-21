@@ -7,9 +7,6 @@ create table boundary(id bigint primary key, name text, name_ru text, name_en te
 
 create table building(id bigint primary key, name text, street text, housenumber text, is_rel boolean default false);
 
-create table relation_ways(rel_id bigint, way_id bigint);
-CREATE INDEX relation_ways_rel_id on relation_ways(rel_id);
-
 create sequence st_seq;
 create table stringtable (
        id bigint not null default nextval('st_seq'),

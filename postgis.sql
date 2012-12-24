@@ -52,9 +52,6 @@ create table relation_members (
        member_type integer);
 create index relation_members_relation_id on relation_members (relation_id);
 
-
-insert into way_geom (SELECT way_id, st_makeline(point) from way_refs left join node on (node_id = node.id) group by way_id);
-
 begin;
 select relation_id into temp boundary_ids from relation_tags where relation_tags.key_id = (SELECT id from stringtable where s = 'boundary') and relation_tags.val_id = (SELECT id from stringtable where s = 'administrative');
 SELECT relation_id, s into temp boundary_names from relation_tags left join stringtable on (relation_tags.val_id = stringtable.id) where relation_id in (select * from boundary_ids) and key_id = (SELECT id from stringtable where s = 'name');
@@ -117,11 +114,17 @@ create table way_geom (
        id bigint primary key);
 select addgeometrycolumn('way_geom', 'geom', 4326, 'LINESTRING', 2);
 
+insert into way_geom (SELECT way_id, st_makeline(point) from way_refs left join node on (node_id = node.id) group by way_id);
+
 
 create table boundary_poly (
     id bigint primary key);
 select addgeometrycolumn('boundary_poly', 'geom', 4326, 'POLYGON', 2);
 create index boundary_poly_geom on boundary_poly using gist(geom);
 
-select boundary.id as id, (st_dump(st_polygonize(geom))).geom as geom from boundary left join relation_members on (boundary.id = relation_id and member_type = 1) left join way_geom on (member_id = way_geom.id) group by boundary.id;
+create table building_poly (
+    id bigint primary key);
+select addgeometrycolumn('building_poly', 'geom', 4326, 'POLYGON', 2);
+create index building_poly_geom on building_poly using gist(geom);
+
 

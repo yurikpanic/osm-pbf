@@ -104,11 +104,11 @@
             (format t "~A" id)
             (if (zerop (query (format nil "(select count(relation_id) from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A and geom is null)" id) :single))
                 (progn
-                  (execute (format nil "insert into boundary_poly (select ~A, (st_dump(st_polygonize(geom))).geom as geom from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A)" id id))
+                  (execute (format t "insert into boundary_poly (select ~A, (st_dump(st_polygonize(geom))).geom as geom from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A)" id id))
                   (incf ins)
                   (format t "~%"))
                 (progn
-                  (format t "empty way~%")
+                  (format t " empty way~%")
                   (incf skip))))
         (CL-POSTGRES-ERROR:INTERNAL-ERROR () (format t " skip~%") (incf skip))))
     (values ins skip)))

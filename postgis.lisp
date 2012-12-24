@@ -6,7 +6,7 @@
         :cl-postgres
         :b-tree
         :in-mem-str)
-  (:export :default-connect
+  (:export :db-connect
            :write-way
            :check-rel-members
            :write-rel
@@ -29,9 +29,9 @@
 (defvar *db-user* "gis")
 (defvar *db-password* "gis")
 
-(defun default-connect ()
+(defun db-connect (&key (host *db-host*) (name *db-name*) (user *db-user*) (password *db-password*))
   (when *database* (disconnect-toplevel))
-  (connect-toplevel *db-name* *db-user* *db-password* *db-host*))
+  (connect-toplevel name user password host))
 
 (defun make-way-linestring (way nodes-btree)
   (let ((points-list
@@ -96,9 +96,22 @@
     (write-relation-ways rel)))
 
 (defun create-boundary-polys ()
-  (with-transaction ()
-    (execute "select boundary.id as id, (st_dump(st_polygonize(geom))).geom as geom into boundary_poly from boundary left join relation_ways on (boundary.id = rel_id) left join way_geom on (way_id = way_geom.id) group by boundary.id")
-    (execute "CREATE INDEX boundary_poly_geom on boundary_poly using gist(geom)")))
+  (let ((ins 0)
+        (skip 0))
+    (dolist (id (query (:select 'id :from 'boundary) :column))
+      (handler-case
+          (progn
+            (format t "~A" id)
+            (if (zerop (query (format nil "(select count(relation_id) from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A and geom is null)" id) :single))
+                (progn
+                  (execute (format nil "insert into boundary_poly (select ~A, (st_dump(st_polygonize(geom))).geom as geom from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A)" id id))
+                  (incf ins)
+                  (format t "~%"))
+                (progn
+                  (format t "empty way~%")
+                  (incf skip))))
+        (CL-POSTGRES-ERROR:INTERNAL-ERROR () (format t " skip~%") (incf skip))))
+    (values ins skip)))
 
 (defun write-building-rel (rel)
   (with-transaction ()
@@ -120,9 +133,11 @@
                            'street (tag-value (find-tag (way-tags way) "addr:street") :NULL)
                            'housenumber (tag-value (find-tag (way-tags way) "addr:housenumber") :NULL)))))
 
+
+
 (defun create-building-polys ()
   (with-transaction ()
-    (execute "select building.id as id, (st_dump(st_polygonize(geom))).geom as geom into building_poly from building left join relation_ways on (building.id = rel_id) left join way_geom on (way_id = way.id)where is_rel = true group by building.id")
+    (execute "select building.id as id, (st_dump(st_polygonize(geom))).geom as geom into building_poly from building left join relation_members on (building.id = relation_id and member_type = 1) left join way_geom on (member_id = way_geom.id) where is_rel = true group by building.id")
     (execute "insert into building_poly select building.id as id, (st_dump(st_polygonize(geom))).geom as geom from building left join way on (building.id = way.id) where is_rel = false group by building.id")
     (execute "CREATE INDEX building_poly_geom on building_poly using gist(geom)")))
 

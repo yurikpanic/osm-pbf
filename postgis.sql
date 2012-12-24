@@ -1,8 +1,3 @@
-create table way_geom (
-       id bigint primary key);
-
-SELECT addgeometrycolumn('way_geom', 'geom', 4326, 'LINESTRING', 2);
-
 create table boundary(id bigint primary key, name text, name_ru text, name_en text, admin_level integer);
 
 create table building(id bigint primary key, name text, street text, housenumber text, is_rel boolean default false);
@@ -117,3 +112,16 @@ drop table building_names;
 drop table building_streets;
 drop table building_housenumbers;
 end;
+
+create table way_geom (
+       id bigint primary key);
+select addgeometrycolumn('way_geom', 'geom', 4326, 'LINESTRING', 2);
+
+
+create table boundary_poly (
+    id bigint primary key);
+select addgeometrycolumn('boundary_poly', 'geom', 4326, 'POLYGON', 2);
+create index boundary_poly_geom on boundary_poly using gist(geom);
+
+select boundary.id as id, (st_dump(st_polygonize(geom))).geom as geom from boundary left join relation_members on (boundary.id = relation_id and member_type = 1) left join way_geom on (member_id = way_geom.id) group by boundary.id;
+

@@ -85,6 +85,11 @@
                                   'rel-id (relation-id rel)
                                   'way-id (rel-member-id mem))))))
 
+(defun create-way-geom ()
+  (dolist (id (query (:select 'id :from 'way) :column))
+    (format t "~A~%" id)
+    (execute (format nil "insert into way_geom (select ~A as id, st_makeline(foo.point) as geom from (SELECT point from way_refs left join  node on (node_id = node.id) where way_id = ~A order by seq) foo)" id id))))
+
 (defun write-boundary (rel)
   (with-transaction ()
     (execute (:insert-into 'boundary
@@ -104,7 +109,7 @@
             (format t "~A" id)
             (if (zerop (query (format nil "(select count(relation_id) from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A and geom is null)" id) :single))
                 (progn
-                  (execute (format t "insert into boundary_poly (select ~A, (st_dump(st_polygonize(geom))).geom as geom from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A)" id id))
+                  (execute (format nil "insert into boundary_poly (select ~A, (st_dump(st_polygonize(geom))).geom as geom from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A)" id id))
                   (incf ins)
                   (format t "~%"))
                 (progn

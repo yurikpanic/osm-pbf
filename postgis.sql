@@ -1,7 +1,3 @@
-create table boundary(id bigint primary key, name text, name_ru text, name_en text, admin_level integer);
-
-create table building(id bigint primary key, name text, street text, housenumber text, is_rel boolean default false);
-
 create sequence st_seq;
 create table stringtable (
        id bigint not null default nextval('st_seq'),
@@ -32,7 +28,8 @@ create index way_tags_key_id_val_id on way_tags(key_id, val_id);
 
 create table way_refs (
        way_id bigint,
-       node_id bigint);
+       node_id bigint,
+       seq serial8);
 create index way_refs_way_id on way_refs (way_id);
 
 create table relation (
@@ -49,8 +46,14 @@ create index relation_tags_key_id_val_id on relation_tags(key_id, val_id);
 create table relation_members (
        relation_id bigint,
        member_id bigint,
-       member_type integer);
+       member_type integer,
+       seq serial8);
 create index relation_members_relation_id on relation_members (relation_id);
+
+create table boundary(id bigint primary key, name text, name_ru text, name_en text, admin_level integer);
+
+create table building(id bigint primary key, name text, street text, housenumber text, is_rel boolean default false);
+
 
 begin;
 select relation_id into temp boundary_ids from relation_tags where relation_tags.key_id = (SELECT id from stringtable where s = 'boundary') and relation_tags.val_id = (SELECT id from stringtable where s = 'administrative');
@@ -113,8 +116,6 @@ end;
 create table way_geom (
        id bigint primary key);
 select addgeometrycolumn('way_geom', 'geom', 4326, 'LINESTRING', 2);
-
-insert into way_geom (SELECT way_id, st_makeline(point) from way_refs left join node on (node_id = node.id) group by way_id);
 
 
 create table boundary_poly (

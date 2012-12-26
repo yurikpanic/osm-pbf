@@ -95,24 +95,6 @@
                                           (if (integerp (read-from-string val)) val -1))))
     (write-relation-ways rel)))
 
-(defun create-boundary-polys ()
-  (let ((ins 0)
-        (skip 0))
-    (dolist (id (query (:select 'id :from 'boundary) :column))
-      (handler-case
-          (progn
-            (format t "~A" id)
-            (if (zerop (query (format nil "(select count(relation_id) from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A and geom is null)" id) :single))
-                (progn
-                  (execute (format nil "insert into boundary_poly (select ~A, (st_dump(st_polygonize(geom))).geom as geom from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = ~A)" id id))
-                  (incf ins)
-                  (format t "~%"))
-                (progn
-                  (format t " empty way~%")
-                  (incf skip))))
-        (CL-POSTGRES-ERROR:INTERNAL-ERROR () (format t " skip~%") (incf skip))))
-    (values ins skip)))
-
 (defun write-building-rel (rel)
   (with-transaction ()
     (execute (:insert-into 'building

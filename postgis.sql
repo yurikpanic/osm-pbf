@@ -129,10 +129,13 @@ begin
                        from (SELECT point
                                     from way_refs
                                     left join node
-                                    on (node_id = node.id) where way_id = wid order by seq)
+                                    on (node_id = node.id)
+                                    where way_id = wid
+                                    order by seq)
                              as foo);
         cnt := cnt + 1;
     end loop;
+    update way_geom set geom = null where geom is not null and st_npoints(geom) < 2;
     return cnt;
 end
 $proc$ language plpgsql;
@@ -140,8 +143,39 @@ $proc$ language plpgsql;
 
 create table boundary_poly (
     id bigint primary key);
-select addgeometrycolumn('boundary_poly', 'geom', 4326, 'POLYGON', 2);
+select addgeometrycolumn('boundary_poly', 'geom', 4326, 'MULTIPOLYGON', 2);
 create index boundary_poly_geom on boundary_poly using gist(geom);
+
+create or replace function create_boundary_polies() returns integer as $proc$
+declare
+    bid integer;
+    rel_cnt integer;
+    ins_cnt integer;
+begin
+    ins_cnt := 0;
+    for bid in select id from boundary loop
+        raise info 'id %', bid;
+        select into rel_cnt count(relation_id) from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = bid and geom is null;
+        if rel_cnt = 0 then
+            insert into boundary_poly
+                   (select bid as id, st_collect(bar.geom)
+                           from (SELECT (st_dump(st_polygonize(foo.geom))).geom
+                                        from (SELECT geom
+                                                     from relation_members
+                                                     left join way_geom
+                                                     on (member_id = way_geom.id)
+                                                     where relation_id = bid and member_type = 1
+                                                     order by seq)
+                                              as foo)
+                                 as bar);
+            ins_cnt := ins_cnt + 1;
+        else
+            raise info '% has empty ways', bid;
+        end if;
+    end loop;
+    return ins_cnt;
+end
+$proc$ language plpgsql;
 
 create table building_poly (
     id bigint primary key);

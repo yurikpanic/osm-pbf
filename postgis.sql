@@ -117,6 +117,26 @@ create table way_geom (
        id bigint primary key);
 select addgeometrycolumn('way_geom', 'geom', 4326, 'LINESTRING', 2);
 
+create or replace function create_way_geom() returns integer as $proc$
+declare
+    wid integer;
+    cnt integer;
+begin
+    cnt := 0;
+    for wid in select id from way loop
+        insert into way_geom
+               (select wid as id, st_makeline(foo.point) as geom
+                       from (SELECT point
+                                    from way_refs
+                                    left join node
+                                    on (node_id = node.id) where way_id = wid order by seq)
+                             as foo);
+        cnt := cnt + 1;
+    end loop;
+    return cnt;
+end
+$proc$ language plpgsql;
+
 
 create table boundary_poly (
     id bigint primary key);
@@ -127,5 +147,4 @@ create table building_poly (
     id bigint primary key);
 select addgeometrycolumn('building_poly', 'geom', 4326, 'POLYGON', 2);
 create index building_poly_geom on building_poly using gist(geom);
-
 

@@ -85,11 +85,6 @@
                                   'rel-id (relation-id rel)
                                   'way-id (rel-member-id mem))))))
 
-(defun create-way-geom ()
-  (dolist (id (query (:select 'id :from 'way) :column))
-    (format t "~A~%" id)
-    (execute (format nil "insert into way_geom (select ~A as id, st_makeline(foo.point) as geom from (SELECT point from way_refs left join  node on (node_id = node.id) where way_id = ~A order by seq) foo)" id id))))
-
 (defun write-boundary (rel)
   (with-transaction ()
     (execute (:insert-into 'boundary

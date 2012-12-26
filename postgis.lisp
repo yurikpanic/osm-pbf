@@ -115,18 +115,6 @@
                            'street (tag-value (find-tag (way-tags way) "addr:street") :NULL)
                            'housenumber (tag-value (find-tag (way-tags way) "addr:housenumber") :NULL)))))
 
-;; select relation.id, astext(st_polygonize(geom)) from relation left join relation_ways on (relation.id = rel_id) left join way on (way_id = way.id) group by relation.id;
-;; select relation.id, st_polygonize(geom) as geom into relation_poly from relation left join relation_ways on (relation.id = rel_id) left join way on (way_id = way.id) group by relation.id;
-
-;; select relation.id as id, (st_dump(st_polygonize(geom))).geom as geom from relation left join relation_ways on (relation.id = rel_id) left join way on (way_id = way.id) group by relation.id;
-;; select relation.id as id, (st_dump(st_polygonize(geom))).geom as geom into relation_poly from relation left join relation_ways on (relation.id = rel_id) left join way on (way_id = way.id) group by relation.id;
-;; CREATE INDEX relation_poly_geom on relation_poly using gist(geom);
-;; SELECT id, st_within(st_geomfromewkt('SRID=4326;POINT(35.209808 47.881355)'), geom) from relation_poly;
-;; SELECT id from relation_poly where st_within(st_geomfromewkt('SRID=4326;POINT(35.209808 47.881355)'), geom);
-
-;; SELECT id, st_distance_sphere(geom, st_geomfromewkt('SRID=4326;POINT(35.209808 47.881355)')) as dist from building_poly where st_dwithin(geom, st_geomfromewkt('SRID=4326;POINT(35.209808 47.881355)'), 0.1) order by dist limit 1;
-;; SELECT building_poly.id, st_distance_sphere(geom, st_geomfromewkt('SRID=4326;POINT(35.209808 47.881355)')) as dist, name, street, housenumber from building_poly left join building on (building_poly.id = building.id) where st_dwithin(geom, st_geomfromewkt('SRID=4326;POINT(35.209808 47.881355)'), 0.1) order by dist;
-
 (defun query-point (lon lat)
   (let ((point-str (format nil "SRID=4326;POINT(~F ~F)" lon lat)))
     (list 
@@ -166,8 +154,6 @@
 ;;      (when (or (first (second cc)) (second (second cc)))
 ;;        (format t "========~%~A~%" c)
 ;;        (format t "~A~%" cc)))))
-
-
 
 (defun update-stringtable (st)
   (let ((idx (make-array (length st) :element-type '(unsigned-byte 64))))

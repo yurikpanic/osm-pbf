@@ -115,14 +115,6 @@
                            'street (tag-value (find-tag (way-tags way) "addr:street") :NULL)
                            'housenumber (tag-value (find-tag (way-tags way) "addr:housenumber") :NULL)))))
 
-
-
-(defun create-building-polys ()
-  (with-transaction ()
-    (execute "select building.id as id, (st_dump(st_polygonize(geom))).geom as geom into building_poly from building left join relation_members on (building.id = relation_id and member_type = 1) left join way_geom on (member_id = way_geom.id) where is_rel = true group by building.id")
-    (execute "insert into building_poly select building.id as id, (st_dump(st_polygonize(geom))).geom as geom from building left join way on (building.id = way.id) where is_rel = false group by building.id")
-    (execute "CREATE INDEX building_poly_geom on building_poly using gist(geom)")))
-
 ;; select relation.id, astext(st_polygonize(geom)) from relation left join relation_ways on (relation.id = rel_id) left join way on (way_id = way.id) group by relation.id;
 ;; select relation.id, st_polygonize(geom) as geom into relation_poly from relation left join relation_ways on (relation.id = rel_id) left join way on (way_id = way.id) group by relation.id;
 

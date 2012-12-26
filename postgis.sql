@@ -158,7 +158,7 @@ begin
         select into rel_cnt count(relation_id) from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = bid and geom is null;
         if rel_cnt = 0 then
             insert into boundary_poly
-                   (select bid as id, st_collect(bar.geom)
+                   (select bid, st_collect(bar.geom)
                            from (SELECT (st_dump(st_polygonize(foo.geom))).geom
                                         from (SELECT geom
                                                      from relation_members
@@ -179,6 +179,47 @@ $proc$ language plpgsql;
 
 create table building_poly (
     id bigint primary key);
-select addgeometrycolumn('building_poly', 'geom', 4326, 'POLYGON', 2);
+select addgeometrycolumn('building_poly', 'geom', 4326, 'MULTIPOLYGON', 2);
 create index building_poly_geom on building_poly using gist(geom);
 
+create or replace function create_building_polies() returns integer as $proc$
+declare
+    bid integer;
+    rel_cnt integer;
+    ins_cnt integer;
+begin
+    ins_cnt := 0;
+    for bid in select id from building where is_rel loop
+        raise info 'rel id %', bid;
+        select into rel_cnt count(relation_id) from relation_members left join way_geom on (member_id = way_geom.id) where member_type = 1 and relation_id = bid and geom is null;
+        if rel_cnt = 0 then
+            insert into building_poly
+                   (select bid, st_collect(bar.geom)
+                           from (SELECT (st_dump(st_polygonize(foo.geom))).geom
+                                        from (SELECT geom
+                                                     from relation_members
+                                                     left join way_geom
+                                                     on (member_id = way_geom.id)
+                                                     where relation_id = bid and member_type = 1
+                                                     order by seq)
+                                              as foo)
+                                 as bar);
+            ins_cnt := ins_cnt + 1;
+        else
+            raise info '% has empty ways', bid;
+        end if;
+    end loop;
+    
+    for bid in select building.id from building left join way_geom on (building.id = way_geom.id) where not is_rel and geom is not null loop
+        raise info 'way id %', bid;
+        insert into building_poly
+               (select bid, st_asewkt(st_collect(foo.geom))
+                       from (SELECT (st_dump(st_polygonize(geom))).geom as geom
+                                    from way_geom
+                                    where id = bid)
+                             as foo);
+    end loop;
+    
+    return ins_cnt;
+end
+$proc$ language plpgsql;
